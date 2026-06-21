@@ -1,5 +1,5 @@
 Rails.application.routes.draw do
   get "orders/create"
   resources :medicines, only: [:index]
-  resources :orders, only: [:create]
+  resources :orders, only: [:create, :update]
 end

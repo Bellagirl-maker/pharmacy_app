@@ -37,4 +37,40 @@ class OrdersController < ApplicationController
   rescue => e
     render json: { error: e.message }, status: :bad_request
   end
+
+  # PUT/PATCH /orders/:id
+  def update
+    @order = Order.find(params[:id])
+
+    # Safety guard: Check if the order is already paid for or dispensed
+    if @order.status != 'pending'
+      render json: { error: "Order is already #{@order.status}" }, status: :unprocessable_entity
+      return
+    end
+
+    # Use a database transaction to ensure stock is updated safely alongside the order status
+    ActiveRecord::Base.transaction do
+      @order.order_items.each do |item|
+        medicine = item.medicine
+        
+        # Deduct the ordered quantity from the medicine's real-time stock
+        new_stock = medicine.stock_quantity - item.quantity
+        
+        if new_stock < 0
+          raise ActiveRecord::Rollback, "Insufficient stock for #{medicine.name}"
+        end
+
+        medicine.update!(stock_quantity: new_stock)
+      end
+
+      # Flip the switch to 'paid'
+      if @order.update(status: 'paid')
+        render json: @order.as_json(include: :order_items), status: :ok
+      else
+        render json: { errors: @order.errors.full_messages }, status: :unprocessable_entity
+      end
+    end
+  rescue => e
+    render json: { error: e.message }, status: :bad_request
+  end
 end
