@@ -1,0 +1,13 @@
+# Read about fixtures at https://api.rubyonrails.org/classes/ActiveRecord/FixtureSet.html
+
+one:
+  order: one
+  medicine: one
+  quantity: 1
+  price_at_sale: 9.99
+
+two:
+  order: two
+  medicine: two
+  quantity: 1
+  price_at_sale: 9.99
