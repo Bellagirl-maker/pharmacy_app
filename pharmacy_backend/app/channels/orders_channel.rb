@@ -1,9 +1,10 @@
 class OrdersChannel < ApplicationCable::Channel
   def subscribed
-    # stream_from "some_channel"
+    # This sets up the real-time radio frequency for our pharmacy
+    stream_from "orders_channel"
   end
 
   def unsubscribed
-    # Any cleanup needed when channel is unsubscribed
+    # Any cleanup when a user closes their tab goes here
   end
 end
