@@ -10,9 +10,40 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.0].define(version: 2026_06_14_152143) do
+ActiveRecord::Schema[8.0].define(version: 2026_07_23_222107) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
+
+  create_table "audit_logs", force: :cascade do |t|
+    t.bigint "manager_id", null: false
+    t.string "action_type"
+    t.string "trackable_type"
+    t.integer "trackable_id"
+    t.text "details"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["manager_id"], name: "index_audit_logs_on_manager_id"
+    t.index ["trackable_type", "trackable_id"], name: "index_audit_logs_on_trackable_type_and_trackable_id"
+  end
+
+  create_table "batches", force: :cascade do |t|
+    t.bigint "medicine_id", null: false
+    t.string "batch_number"
+    t.integer "quantity"
+    t.date "expiry_date"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["medicine_id"], name: "index_batches_on_medicine_id"
+  end
+
+  create_table "managers", force: :cascade do |t|
+    t.string "username"
+    t.string "password_digest"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.string "role"
+    t.boolean "must_change_password"
+  end
 
   create_table "medicines", force: :cascade do |t|
     t.string "name"
@@ -39,8 +70,13 @@ ActiveRecord::Schema[8.0].define(version: 2026_06_14_152143) do
     t.string "status"
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+    t.bigint "manager_id", null: false
+    t.index ["manager_id"], name: "index_orders_on_manager_id"
   end
 
+  add_foreign_key "audit_logs", "managers"
+  add_foreign_key "batches", "medicines"
   add_foreign_key "order_items", "medicines"
   add_foreign_key "order_items", "orders"
+  add_foreign_key "orders", "managers"
 end
