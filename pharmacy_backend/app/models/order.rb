@@ -3,8 +3,10 @@ class Order < ApplicationRecord
   has_many :order_items, dependent: :destroy
   has_many :medicines, through: :order_items
 
-  # Limit status strictly to our 3 pharmacy steps
-  validates :status, inclusion: { in: %w[pending paid dispensed] }
+  belongs_to :manager # The employee responsible for this state change
+  has_many :audit_logs, as: :trackable
+
+  validates :status, inclusion: { in: %w[pending paid dispensed cancelled] }
   
   before_validation :set_defaults, on: :create
 
