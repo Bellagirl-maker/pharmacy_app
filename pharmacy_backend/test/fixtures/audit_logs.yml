@@ -1,0 +1,15 @@
+# Read about fixtures at https://api.rubyonrails.org/classes/ActiveRecord/FixtureSet.html
+
+one:
+  manager: one
+  action_type: MyString
+  trackable_type: MyString
+  trackable_id: 1
+  details: MyText
+
+two:
+  manager: two
+  action_type: MyString
+  trackable_type: MyString
+  trackable_id: 1
+  details: MyText
