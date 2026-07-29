@@ -20,4 +20,19 @@ Batch.create!(medicine: ibu, batch_number: "IBU-BAD-01", quantity: 15, expiry_da
 puts "Successfully seeded pharmacy inventory with multi-batch expiry metrics!"
 Manager.find_or_create_by!(username: "admin") do |manager|
   manager.password = "rxlocal2026" # Choose whatever secure password you prefer!
+endManager.find_or_create_by!(username: "admin") do |manager|
+  manager.password = "rxlocal2026"
+  manager.role = "owner"
 end
+
+Manager.find_or_create_by!(username: "counter") do |manager|
+  manager.password = "rxlocal2026"
+  manager.role = "counter"
+end
+
+Manager.find_or_create_by!(username: "cashier") do |manager|
+  manager.password = "rxlocal2026"
+  manager.role = "cashier"
+end
+
+puts "Successfully seeded managers!"
