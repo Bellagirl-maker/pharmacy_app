@@ -1,6 +1,6 @@
 import { createConsumer } from '@rails/actioncable';
 
-// This connects directly to the 'mount ActionCable.server => "/cable"' route we set up in Rails
-const cable = createConsumer('ws://localhost:3000/cable');
+const WS_URL = import.meta.env.VITE_WS_URL || 'ws://localhost:3000/cable';
+const cable = createConsumer(WS_URL);
 
 export default cable;
