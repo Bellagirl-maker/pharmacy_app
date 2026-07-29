@@ -1,3 +1,4 @@
+
 # Clear out old data to ensure clean IDs
 OrderItem.destroy_all
 Order.destroy_all
@@ -17,10 +18,9 @@ Batch.create!(medicine: para, batch_number: "PARA-EXP-99", quantity: 45, expiry_
 ibu = Medicine.create!(name: "Ibuprofen 400mg", price: 12.50, shelf_location: "Aisle 2, Shelf A")
 Batch.create!(medicine: ibu, batch_number: "IBU-BAD-01", quantity: 15, expiry_date: Date.today - 25.days)
 
-puts "Successfully seeded pharmacy inventory with multi-batch expiry metrics!"
+puts "Successfully seeded pharmacy inventory!"
+
 Manager.find_or_create_by!(username: "admin") do |manager|
-  manager.password = "rxlocal2026" # Choose whatever secure password you prefer!
-endManager.find_or_create_by!(username: "admin") do |manager|
   manager.password = "rxlocal2026"
   manager.role = "owner"
 end
