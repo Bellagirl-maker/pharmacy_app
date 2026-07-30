@@ -4,7 +4,7 @@ import api from '../api';
 import { getLocalMedicines } from '../db/indexedDB'; // Dexie local database helper
 import { syncEngine } from '../services/syncEngine'; // Sync manager for queued orders
 
-axios.defaults.withCredentials = true;
+api.defaults.withCredentials = true;
 
 function CounterDesk() {
   // --- 1. State ---
