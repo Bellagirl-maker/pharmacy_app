@@ -1,8 +1,7 @@
 // ChangePasswordModal.jsx
 import React, { useState } from 'react';
-import axios from 'axios';
+import api from '../api';
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000';
 
 export default function ChangePasswordModal({ user, onSuccess }) {
   const [newPassword, setNewPassword] = useState('');
@@ -23,7 +22,7 @@ export default function ChangePasswordModal({ user, onSuccess }) {
     setError(null);
 
     try {
-      await axios.patch(`${API_BASE_URL}/managers/${user.id}/update_password`, {
+      await api.patch(`${API_BASE_URL}/managers/${user.id}/update_password`, {
         new_password: newPassword
       });
       onSuccess();

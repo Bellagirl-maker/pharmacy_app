@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Routes, Route, Link, useLocation, useNavigate } from 'react-router-dom';
-import axios from 'axios';
+import api from './api';
 import cable from './cable'; 
 
 import CounterDesk from './pages/CounterDesk';
@@ -10,8 +10,6 @@ import InventoryDesk from './pages/InventoryDesk';
 
 import { syncEngine } from './services/syncEngine';
 import { db, cacheMedicinesLocally } from './db/indexedDB';
-
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000';
 
 function NavigationHeader({ 
   isAuthenticated, 
@@ -44,8 +42,6 @@ function NavigationHeader({
           <span className="text-xl p-1.5 bg-teal-700/60 rounded-lg">💊</span>
           <div>
             <h1 className="text-xl font-black tracking-tight select-none">RxLocal Workspace</h1>
-            
-            {/* Live Network & Queue Indicator */}
             <div className="flex items-center gap-2 text-[11px] font-semibold mt-0.5">
               <span className={`inline-block w-2 h-2 rounded-full ${isNetworkOnline ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'}`}></span>
               <span className="text-teal-100">
@@ -154,11 +150,9 @@ export default function App() {
   const [userRole, setUserRole] = useState(null); 
   const [activeUsername, setActiveUsername] = useState('');
 
-  // --- Network & Offline Sync State ---
   const [isNetworkOnline, setIsNetworkOnline] = useState(navigator.onLine);
   const [unsyncedCount, setUnsyncedCount] = useState(0);
 
-  // --- Auth & Modals State ---
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -174,10 +168,9 @@ export default function App() {
 
   const [orders, setOrders] = useState([]);
 
-  // Fetch and Cache Inventory for Offline Availability
   const syncLocalInventoryCache = useCallback(async () => {
     try {
-      const response = await axios.get(`${API_BASE_URL}/medicines`);
+      const response = await api.get('/medicines');
       if (Array.isArray(response.data)) {
         await cacheMedicinesLocally(response.data);
       }
@@ -186,7 +179,6 @@ export default function App() {
     }
   }, []);
 
-  // Update Pending Queue Counter
   const updateQueueCount = useCallback(async () => {
     const count = await db.offlineOrders.where('synced').equals(0).count();
     setUnsyncedCount(count);
@@ -194,21 +186,19 @@ export default function App() {
 
   const fetchOrders = useCallback(async () => {
     if (!navigator.onLine) {
-      // Read local unsynced offline orders when network is down
       const cachedOrders = await db.offlineOrders.toArray();
       setOrders(cachedOrders);
       return;
     }
 
     try {
-      const response = await axios.get(`${API_BASE_URL}/orders`);
+      const response = await api.get('/orders');
       setOrders(response.data || []);
     } catch (err) {
       console.warn('Failed network orders fetch, reading local state:', err);
     }
   }, []);
 
-  // Monitor Network Connectivity & Handle Background Re-sync
   useEffect(() => {
     const handleOnline = async () => {
       setIsNetworkOnline(true);
@@ -224,7 +214,6 @@ export default function App() {
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
 
-    // Initial load sync check
     updateQueueCount();
     syncLocalInventoryCache();
     fetchOrders();
@@ -235,7 +224,6 @@ export default function App() {
     };
   }, [fetchOrders, syncLocalInventoryCache, updateQueueCount]);
 
-  // WebSocket Subscription with ActionCable
   useEffect(() => {
     if (!isNetworkOnline) return;
 
@@ -261,7 +249,7 @@ export default function App() {
     setLoginError(null);
 
     try {
-      const response = await axios.post(`${API_BASE_URL}/login`, { username, password });
+      const response = await api.post('/login', { username, password });
 
       if (response.data.success) {
         const assignedRole = response.data.role || 'counter';
@@ -297,11 +285,10 @@ export default function App() {
     setIsUpdatingPassword(true);
 
     try {
-      await axios.patch(
-        `${API_BASE_URL}/profile/change_password`,
-        { current_password: currentPassword, new_password: newPassword },
-        { headers: { 'X-Manager-Username': activeUsername } }
-      );
+      await api.patch('/profile/change_password', {
+        current_password: currentPassword,
+        new_password: newPassword
+      });
 
       setPasswordSuccess("Password updated successfully.");
       setTimeout(() => {
@@ -357,7 +344,6 @@ export default function App() {
         </Routes>
       </main>
 
-      {/* LOGIN MODAL */}
       {showLoginModal && (
         <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-2xl shadow-xl border border-slate-100 max-w-sm w-full p-6 relative">
@@ -383,7 +369,6 @@ export default function App() {
         </div>
       )}
 
-      {/* CHANGE PASSWORD MODAL */}
       {showPasswordModal && (
         <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-2xl shadow-xl border border-slate-100 max-w-md w-full p-6 relative">
