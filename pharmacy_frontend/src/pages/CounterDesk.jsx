@@ -1,12 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { formatCurrency } from '../utils/formatters';
-import axios from 'axios';
+import api from '../api';
 import { getLocalMedicines } from '../db/indexedDB'; // Dexie local database helper
 import { syncEngine } from '../services/syncEngine'; // Sync manager for queued orders
 
 axios.defaults.withCredentials = true;
-
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000';
 
 function CounterDesk() {
   // --- 1. State ---

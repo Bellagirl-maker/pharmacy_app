@@ -1,10 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import axios from 'axios';
+import api from '../api';
 import { formatCurrency } from '../utils/formatters';
 import InventoryBulkImport from '../components/InventoryBulkImport';
 import { db } from '../db/indexedDB'; // Dexie/IndexedDB instance
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000';
 
 export default function InventoryDesk() {
   const [inventory, setInventory] = useState([]);
