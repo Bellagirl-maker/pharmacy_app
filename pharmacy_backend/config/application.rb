@@ -24,6 +24,10 @@ module PharmacyBackend
 
     # 🎯 ADD THESE TWO LINES HERE TO ENABLE SESSIONS & COOKIES:
     config.middleware.use ActionDispatch::Cookies
-    config.middleware.use ActionDispatch::Session::CookieStore, key: '_pharmacy_session'
+    config.middleware.use ActionDispatch::Session::CookieStore,
+      key: '_pharmacy_session',
+      domain: '.onrender.com',
+      same_site: :none,
+      secure: true
   end
 end
