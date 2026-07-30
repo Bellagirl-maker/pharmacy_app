@@ -6,7 +6,6 @@ import api from '../api';
 const getOrderTotal = (order) => {
   if (!order) return 0;
 
-  // 1. Check direct top-level keys
   const directValue =
     order.total_price ??
     order.total_amount ??
@@ -20,7 +19,6 @@ const getOrderTotal = (order) => {
   const numericValue = Number(directValue);
   if (!isNaN(numericValue) && numericValue > 0) return numericValue;
 
-  // 2. Fallback: Calculate sum from nested line items array if available
   const lineItems = order.items || order.order_items || order.line_items || order.cart;
   if (Array.isArray(lineItems) && lineItems.length > 0) {
     return lineItems.reduce((sum, item) => {
@@ -48,10 +46,8 @@ const isToday = (dateString) => {
 };
 
 export default function OwnerDashboard({ orders = [] }) {
-  // --- Navigation Tabs ---
-  const [activeTab, setActiveTab] = useState('analytics'); // 'analytics' or 'staff'
+  const [activeTab, setActiveTab] = useState('analytics');
 
-  // --- Dashboard Data State ---
   const [data, setData] = useState({
     today_sales: 0,
     low_stock_alerts: [],
@@ -62,13 +58,11 @@ export default function OwnerDashboard({ orders = [] }) {
   });
   const [isLoading, setIsLoading] = useState(true);
 
-  // --- Staff Management State ---
   const [staffList, setStaffList] = useState([]);
   const [newStaff, setNewStaff] = useState({ username: '', password: '', role: 'counter' });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState(null);
 
-  // --- Reset Password Modal State ---
   const [resetModal, setResetModal] = useState({
     isOpen: false,
     userId: null,
@@ -80,7 +74,7 @@ export default function OwnerDashboard({ orders = [] }) {
     setIsLoading(true);
     setErrorMessage(null);
     try {
-      const response = await axios.get(`${API_BASE_URL}/owner/dashboard`);
+      const response = await api.get('/owner/dashboard');
       setData(response.data || {});
     } catch (err) {
       console.error('Dashboard data fetch failed:', err);
@@ -93,9 +87,7 @@ export default function OwnerDashboard({ orders = [] }) {
   const fetchStaffRoster = useCallback(async () => {
     try {
       setErrorMessage(null);
-      const response = await axios.get(`${API_BASE_URL}/managers`, {
-        headers: { 'X-Manager-Username': 'admin' }
-      });
+      const response = await api.get('/managers');
       setStaffList(response.data || []);
     } catch (err) {
       console.error('Failed to fetch staff roster:', err);
@@ -166,7 +158,6 @@ export default function OwnerDashboard({ orders = [] }) {
     });
   }, [liveVoidedTickets, data.void_logs]);
 
-  // --- Strict Today's Revenue Calculation ---
   const computedSalesToday = useMemo(() => {
     if (Array.isArray(orders) && orders.length > 0) {
       return orders
@@ -174,13 +165,10 @@ export default function OwnerDashboard({ orders = [] }) {
           const status = String(o.status || '').toLowerCase();
           const isPaidStatus = status === 'paid' || status === 'completed';
           const orderDate = o.created_at || o.timestamp || o.date;
-
           return isPaidStatus && !checkIsVoided(o) && isToday(orderDate);
         })
         .reduce((sum, o) => sum + getOrderTotal(o), 0);
     }
-
-    // Direct fallback to backend API value if no live orders array exists
     return Number(data.today_sales || 0);
   }, [orders, data.today_sales]);
 
@@ -190,12 +178,7 @@ export default function OwnerDashboard({ orders = [] }) {
     setErrorMessage(null);
 
     try {
-      await axios.post(
-        `${API_BASE_URL}/managers`,
-        { manager: newStaff },
-        { headers: { 'X-Manager-Username': 'admin' } }
-      );
-
+      await api.post('/managers', { manager: newStaff });
       alert(`Account for "${newStaff.username}" successfully provisioned!`);
       setNewStaff({ username: '', password: '', role: 'counter' });
       fetchStaffRoster();
@@ -218,15 +201,10 @@ export default function OwnerDashboard({ orders = [] }) {
   const handleConfirmResetPassword = async (e) => {
     e.preventDefault();
     const { userId, username, tempPassword } = resetModal;
-
     if (!tempPassword) return;
 
     try {
-      await axios.post(
-        `${API_BASE_URL}/managers/${userId}/reset_password`,
-        { temp_password: tempPassword },
-        { headers: { 'X-Manager-Username': 'admin' } }
-      );
+      await api.post(`/managers/${userId}/reset_password`, { temp_password: tempPassword });
       alert(`Password successfully reset for ${username}.`);
       setResetModal({ isOpen: false, userId: null, username: '', tempPassword: '' });
       fetchStaffRoster();
@@ -240,15 +218,10 @@ export default function OwnerDashboard({ orders = [] }) {
       alert('Security Guard: You cannot delete the primary master administrative account!');
       return;
     }
-
-    if (!window.confirm(`Are you sure you want to revoke access for ${name}?`)) {
-      return;
-    }
+    if (!window.confirm(`Are you sure you want to revoke access for ${name}?`)) return;
 
     try {
-      await axios.delete(`${API_BASE_URL}/managers/${id}`, {
-        headers: { 'X-Manager-Username': 'admin' }
-      });
+      await api.delete(`/managers/${id}`);
       fetchStaffRoster();
     } catch (err) {
       alert(err.response?.data?.error || 'Failed to remove account.');
@@ -265,7 +238,6 @@ export default function OwnerDashboard({ orders = [] }) {
 
   return (
     <div className="max-w-7xl mx-auto px-6 py-6">
-      {/* Dashboard Header */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center border-b pb-5 mb-6 gap-4">
         <div>
           <h2 className="text-2xl font-black text-gray-800 tracking-tight">Owner Control Tower</h2>
@@ -274,7 +246,6 @@ export default function OwnerDashboard({ orders = [] }) {
           </p>
         </div>
 
-        {/* Tab Switcher */}
         <div className="flex bg-gray-200/80 p-1 rounded-xl border border-gray-300/30">
           <button
             onClick={() => setActiveTab('analytics')}
@@ -305,10 +276,8 @@ export default function OwnerDashboard({ orders = [] }) {
         </div>
       )}
 
-      {/* --- TAB 1: ANALYTICS & AUDITS --- */}
       {activeTab === 'analytics' && (
         <div className="space-y-6">
-          {/* Top Metric Cards */}
           <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
             <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-xs">
               <span className="text-xs font-bold uppercase text-gray-400 block mb-1">Gross Revenue (Today)</span>
@@ -340,9 +309,7 @@ export default function OwnerDashboard({ orders = [] }) {
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            {/* Left 2 Columns: Stock & Expiration Audits */}
             <div className="lg:col-span-2 space-y-6">
-              {/* Safety Stock Trigger Alerts Card */}
               <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-xs">
                 <h3 className="font-black text-gray-900 text-lg flex items-center gap-2 mb-4">
                   <span>⚠️</span> Safety Stock Trigger Alerts
@@ -374,12 +341,10 @@ export default function OwnerDashboard({ orders = [] }) {
                 </div>
               </div>
 
-              {/* Compliance Expiration Audit Card */}
               <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-xs">
                 <h3 className="font-black text-gray-900 text-lg flex items-center gap-2 mb-4">
                   <span>📋</span> Compliance Expiration Audit
                 </h3>
-
                 <div className="space-y-4">
                   <div>
                     <span className="text-xs font-black uppercase text-red-600 tracking-wider block mb-2">
@@ -396,9 +361,7 @@ export default function OwnerDashboard({ orders = [] }) {
                             <p className="text-xs text-gray-400 font-mono">Batch: {b.batch}</p>
                           </div>
                           <div className="text-right">
-                            <span className="text-xs font-black text-red-600 block">
-                              Expired: {b.expired_on}
-                            </span>
+                            <span className="text-xs font-black text-red-600 block">Expired: {b.expired_on}</span>
                             <span className="text-xs text-gray-400 font-medium">{b.quantity} units</span>
                           </div>
                         </div>
@@ -426,15 +389,13 @@ export default function OwnerDashboard({ orders = [] }) {
                             <p className="text-xs text-gray-400 font-mono">Batch: {b.batch}</p>
                           </div>
                           <div className="text-right">
-                            <span className="text-xs font-black text-amber-600 block">
-                              Expires: {b.expires_on}
-                            </span>
+                            <span className="text-xs font-black text-amber-600 block">Expires: {b.expires_on}</span>
                             <span className="text-xs text-gray-400 font-medium">{b.quantity} units</span>
                           </div>
                         </div>
                       ))}
                       {(!data.expiring_soon || data.expiring_soon.length === 0) && (
-                        <p className="p-3 text-center text-gray-400 text-xs font-medium pl-1">
+                        <p className="p-3 text-center text-gray-400 text-xs font-medium">
                           No upcoming batch expirations inside 90 days.
                         </p>
                       )}
@@ -444,15 +405,12 @@ export default function OwnerDashboard({ orders = [] }) {
               </div>
             </div>
 
-            {/* Right Column: Security Voids & Operational Audits */}
             <div className="lg:col-span-1 space-y-6">
-              {/* Security Void Trail */}
               <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-xs">
                 <h3 className="font-black text-gray-900 text-lg flex items-center gap-2 mb-1">
                   <span>🛡️</span> Security Void Trail
                 </h3>
                 <p className="text-xs text-gray-400 mb-4">Unfiltered log collection of cancelled/voided invoices.</p>
-
                 <div className="space-y-3 max-h-[300px] overflow-y-auto pr-1">
                   {displayVoidLogs.length === 0 ? (
                     <p className="text-sm text-gray-400 text-center py-4 font-medium">
@@ -463,11 +421,9 @@ export default function OwnerDashboard({ orders = [] }) {
                       const ticketAmount = getOrderTotal(ticket);
                       const rawDate = ticket.updated_at || ticket.created_at || ticket.timestamp;
                       const parsedDate = rawDate ? new Date(rawDate) : new Date();
-
                       const ticketDate = isNaN(parsedDate.getTime())
                         ? 'N/A'
                         : parsedDate.toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
-
                       const ticketTime = isNaN(parsedDate.getTime())
                         ? ''
                         : parsedDate.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
@@ -498,13 +454,11 @@ export default function OwnerDashboard({ orders = [] }) {
                 </div>
               </div>
 
-              {/* Operational Audit Logs */}
               <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-xs">
                 <h3 className="font-black text-gray-900 text-lg flex items-center gap-2 mb-1">
                   <span>📋</span> Live Audit Logs
                 </h3>
                 <p className="text-xs text-gray-400 mb-4">Real-time chronicle across active staff accounts.</p>
-
                 <div className="space-y-3 max-h-[300px] overflow-y-auto pr-1 border border-gray-100 rounded-xl p-2 bg-gray-50/50">
                   {!data.audit_logs || data.audit_logs.length === 0 ? (
                     <p className="text-xs text-gray-400 text-center py-4">No operations logged today.</p>
@@ -513,7 +467,6 @@ export default function OwnerDashboard({ orders = [] }) {
                       const actor = log.performed_by || log.manager_username || 'system';
                       const role = log.role ? ` (${log.role.toUpperCase()})` : '';
                       const target = log.target || log.details || '';
-
                       const rawTimestamp = log.timestamp || log.created_at;
                       const parsedTime = rawTimestamp ? new Date(rawTimestamp) : null;
                       const formattedTime =
@@ -544,7 +497,6 @@ export default function OwnerDashboard({ orders = [] }) {
                             </div>
                             <span className="text-[10px] text-gray-400 font-mono">{formattedTime}</span>
                           </div>
-
                           {target && (
                             <div className="text-[11px] font-bold text-gray-700 bg-gray-50 px-2 py-1 rounded-lg border border-gray-100 font-mono w-fit">
                               🎯 Target: {target}
@@ -561,7 +513,6 @@ export default function OwnerDashboard({ orders = [] }) {
         </div>
       )}
 
-      {/* --- TAB 2: STAFF CONFIGURATIONS --- */}
       {activeTab === 'staff' && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-start">
           <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-xs">
@@ -678,7 +629,6 @@ export default function OwnerDashboard({ orders = [] }) {
                           >
                             <span>🔑</span> Reset
                           </button>
-
                           {user.username !== 'admin' && (
                             <button
                               onClick={() => handleDeleteStaff(user.id, user.username)}
@@ -698,7 +648,6 @@ export default function OwnerDashboard({ orders = [] }) {
         </div>
       )}
 
-      {/* --- RESET PASSWORD MODAL --- */}
       {resetModal.isOpen && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-xs flex justify-center items-center z-50 p-4">
           <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-xl border border-gray-100">
