@@ -1,8 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { formatCurrency } from '../utils/formatters';
-import axios from 'axios';
-
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000';
+import api from '../api';
 
 // --- HELPER 1: Universal Order Total Extractor ---
 const getOrderTotal = (order) => {
