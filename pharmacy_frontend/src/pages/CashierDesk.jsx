@@ -55,7 +55,7 @@ function CashierDesk({ orders = [], fetchOrders }) {
     const remainingQueue = [];
     for (const item of queue) {
       try {
-        await axios.patch(`${API_BASE_URL}/orders/${item.orderId}`, {
+        await api.patch(`/orders/${item.orderId}`, {
           order: { status: item.status }
         });
       } catch (err) {
@@ -95,7 +95,7 @@ function CashierDesk({ orders = [], fetchOrders }) {
     // 2. Try pushing to server if online
     if (navigator.onLine) {
       try {
-        await axios.patch(`${API_BASE_URL}/orders/${orderId}`, {
+        await api.patch(`/orders/${orderId}`, {
           order: { status: targetStatus }
         });
         alert(`${successMsg} (Synced to Server)`);

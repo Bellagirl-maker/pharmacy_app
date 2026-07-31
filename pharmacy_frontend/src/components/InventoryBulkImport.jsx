@@ -27,7 +27,7 @@ export default function InventoryBulkImport({ onImportSuccess }) {
     setStatusMessage({ type: 'info', text: 'Parsing spreadsheet arrays... please wait.' });
 
     try {
-      const response = await api.post(`${API_BASE_URL}/inventory/import`, formData, {
+      const response = await api.post(`/inventory/import`, formData, {
         headers: {
           'Content-Type': 'multipart/form-data',
         },

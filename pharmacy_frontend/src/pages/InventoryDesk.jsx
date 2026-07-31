@@ -46,7 +46,7 @@ export default function InventoryDesk() {
     // 1. Try Online API Request
     if (navigator.onLine) {
       try {
-        const response = await api.get(`${API_BASE_URL}/medicines?search=${encodeURIComponent(debouncedSearch)}`);
+        const response = await api.get(`/medicines?search=${encodeURIComponent(debouncedSearch)}`);
         const remoteData = response.data || [];
         
         setInventory(remoteData);
@@ -102,7 +102,7 @@ export default function InventoryDesk() {
     // Online execution
     if (navigator.onLine) {
       try {
-        await api.delete(`${API_BASE_URL}/medicines/${medicineId}`);
+        await api.delete(`/medicines/${medicineId}`);
         // Also remove from local store
         await db.medicines.delete(medicineId);
         await fetchInventory();
@@ -154,7 +154,7 @@ export default function InventoryDesk() {
 
     if (navigator.onLine) {
       try {
-        await api.delete(`${API_BASE_URL}/batches/${batchId}`);
+        await api.delete(`/batches/${batchId}`);
         await removeBatchLocally();
         await fetchInventory();
       } catch (err) {

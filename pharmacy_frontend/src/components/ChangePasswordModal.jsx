@@ -22,7 +22,7 @@ export default function ChangePasswordModal({ user, onSuccess }) {
     setError(null);
 
     try {
-      await api.patch(`${API_BASE_URL}/managers/${user.id}/update_password`, {
+      await api.patch(`/managers/${user.id}/update_password`, {
         new_password: newPassword
       });
       onSuccess();
