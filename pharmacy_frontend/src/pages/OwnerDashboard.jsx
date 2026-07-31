@@ -105,7 +105,7 @@ export default function OwnerDashboard({ orders = [] }) {
     }
   }, [activeTab, fetchStaffRoster]);
 
-  const checkIsVoided = (order) => {
+  const checkIsVoided = useCallback((order) => {
     if (!order) return false;
     const status = String(order.status || '').toLowerCase();
     const action = String(order.action || '').toLowerCase();
@@ -119,17 +119,19 @@ export default function OwnerDashboard({ orders = [] }) {
       event.includes('void') ||
       event.includes('cancel')
     );
-  };
+  }, []);
 
   const liveVoidedTickets = useMemo(() => {
     if (!Array.isArray(orders)) return [];
     return orders.filter((order) => checkIsVoided(order));
-  }, [orders]);
+  }, [orders, checkIsVoided]);
 
+  // FIXED: Properly preserve the user who VOIDED the ticket (e.g. Bella) 
+  // instead of letting the original order creator (e.g. Sandra) overwrite it.
   const displayVoidLogs = useMemo(() => {
     const combinedRegistry = {};
 
-    if (data.void_logs && Array.isArray(data.void_logs)) {
+    if (Array.isArray(data.void_logs)) {
       data.void_logs.forEach((log) => {
         if (log && (log.id || log.order_id)) {
           const key = log.id || log.order_id;
@@ -141,11 +143,32 @@ export default function OwnerDashboard({ orders = [] }) {
     liveVoidedTickets.forEach((ticket) => {
       const targetId = ticket.id || ticket.order_id;
       if (targetId) {
+        const existingLog = combinedRegistry[targetId] || {};
+        
+        // Prioritize explicit void/cancelled actor fields over order creator fields
+        const voidActor =
+          existingLog.voided_by ||
+          existingLog.cancelled_by ||
+          existingLog.performed_by ||
+          ticket.voided_by ||
+          ticket.cancelled_by ||
+          ticket.performed_by ||
+          existingLog.manager_username ||
+          ticket.manager_username ||
+          ticket.created_by;
+
+        const orderCreator =
+          ticket.created_by ||
+          ticket.creator ||
+          (existingLog.created_by !== voidActor ? existingLog.created_by : null);
+
         combinedRegistry[targetId] = {
-          ...combinedRegistry[targetId],
+          ...existingLog,
           ...ticket,
           id: targetId,
-          status: 'VOIDED'
+          status: 'VOIDED',
+          performed_by: voidActor,
+          created_by: orderCreator
         };
       }
     });
@@ -153,8 +176,8 @@ export default function OwnerDashboard({ orders = [] }) {
     return Object.values(combinedRegistry).sort((a, b) => {
       const dateA = new Date(a.updated_at || a.created_at || a.timestamp || 0).getTime();
       const dateB = new Date(b.updated_at || b.created_at || b.timestamp || 0).getTime();
-      if (dateA && dateB) return dateB - dateA;
-      return String(b.id).localeCompare(String(a.id), undefined, { numeric: true });
+      if (dateA !== dateB) return dateB - dateA;
+      return String(b.id || '').localeCompare(String(a.id || ''), undefined, { numeric: true });
     });
   }, [liveVoidedTickets, data.void_logs]);
 
@@ -170,16 +193,21 @@ export default function OwnerDashboard({ orders = [] }) {
         .reduce((sum, o) => sum + getOrderTotal(o), 0);
     }
     return Number(data.today_sales || 0);
-  }, [orders, data.today_sales]);
+  }, [orders, data.today_sales, checkIsVoided]);
 
   const handleCreateStaff = async (e) => {
     e.preventDefault();
     setIsSubmitting(true);
     setErrorMessage(null);
 
+    const payload = {
+      ...newStaff,
+      username: newStaff.username.toLowerCase().trim()
+    };
+
     try {
-      await api.post('/managers', { manager: newStaff });
-      alert(`Account for "${newStaff.username}" successfully provisioned!`);
+      await api.post('/managers', { manager: payload });
+      alert(`Account for "${payload.username}" successfully provisioned!`);
       setNewStaff({ username: '', password: '', role: 'counter' });
       fetchStaffRoster();
     } catch (err) {
@@ -406,6 +434,7 @@ export default function OwnerDashboard({ orders = [] }) {
             </div>
 
             <div className="lg:col-span-1 space-y-6">
+              {/* VOID LOGS CARD */}
               <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-xs">
                 <h3 className="font-black text-gray-900 text-lg flex items-center gap-2 mb-1">
                   <span>🛡️</span> Security Void Trail
@@ -428,6 +457,9 @@ export default function OwnerDashboard({ orders = [] }) {
                         ? ''
                         : parsedDate.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
 
+                      const voidActor = ticket.performed_by || ticket.voided_by || ticket.cancelled_by || 'Unknown';
+                      const originalCreator = ticket.created_by;
+
                       return (
                         <div
                           key={ticket.id || ticket.order_id}
@@ -436,8 +468,13 @@ export default function OwnerDashboard({ orders = [] }) {
                           <div>
                             <h4 className="font-bold text-gray-900 text-sm">Ref #{ticket.id || ticket.order_id}</h4>
                             <p className="text-xs text-red-600 font-black tracking-wider uppercase mt-1">
-                              Status: <span className="font-extrabold">{ticket.status || 'VOIDED'}</span>
+                              Voided By: <span className="font-extrabold text-gray-900">@{voidActor}</span>
                             </p>
+                            {originalCreator && originalCreator !== voidActor && (
+                              <p className="text-[10px] text-gray-400 font-medium">
+                                Created by @{originalCreator}
+                              </p>
+                            )}
                           </div>
                           <div className="text-right flex flex-col justify-between items-end">
                             <span className="text-sm font-black text-red-600 font-mono">
@@ -454,6 +491,7 @@ export default function OwnerDashboard({ orders = [] }) {
                 </div>
               </div>
 
+              {/* AUDIT LOGS CARD */}
               <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-xs">
                 <h3 className="font-black text-gray-900 text-lg flex items-center gap-2 mb-1">
                   <span>📋</span> Live Audit Logs
@@ -463,8 +501,17 @@ export default function OwnerDashboard({ orders = [] }) {
                   {!data.audit_logs || data.audit_logs.length === 0 ? (
                     <p className="text-xs text-gray-400 text-center py-4">No operations logged today.</p>
                   ) : (
-                    data.audit_logs.map((log) => {
-                      const actor = log.performed_by || log.manager_username || 'system';
+                    data.audit_logs.map((log, idx) => {
+                      // FIXED: Explicitly prioritize who performed the void/action over who originally created the ticket
+                      const actor =
+                        log.voided_by ||
+                        log.cancelled_by ||
+                        log.performed_by ||
+                        log.action_user ||
+                        log.manager_username ||
+                        'system';
+
+                      const creator = log.created_by || log.order_creator;
                       const role = log.role ? ` (${log.role.toUpperCase()})` : '';
                       const target = log.target || log.details || '';
                       const rawTimestamp = log.timestamp || log.created_at;
@@ -476,7 +523,7 @@ export default function OwnerDashboard({ orders = [] }) {
 
                       return (
                         <div
-                          key={log.id}
+                          key={log.id || `${rawTimestamp}-${idx}`}
                           className="p-3 bg-white border border-gray-200 rounded-xl shadow-2xs text-xs flex flex-col gap-1 hover:bg-gray-50 transition-colors"
                         >
                           <div className="flex justify-between items-center">
@@ -497,8 +544,16 @@ export default function OwnerDashboard({ orders = [] }) {
                             </div>
                             <span className="text-[10px] text-gray-400 font-mono">{formattedTime}</span>
                           </div>
+                          
+                          {/* Display original creator if this is a void action and creator is different from actor */}
+                          {log.action_type?.includes('VOID') && creator && creator !== actor && (
+                            <div className="text-[10px] text-gray-400 font-medium">
+                              Original Order Creator: @{creator}
+                            </div>
+                          )}
+
                           {target && (
-                            <div className="text-[11px] font-bold text-gray-700 bg-gray-50 px-2 py-1 rounded-lg border border-gray-100 font-mono w-fit">
+                            <div className="text-[11px] font-bold text-gray-700 bg-gray-50 px-2 py-1 rounded-lg border border-gray-100 font-mono w-fit mt-0.5">
                               🎯 Target: {target}
                             </div>
                           )}
@@ -529,7 +584,7 @@ export default function OwnerDashboard({ orders = [] }) {
                   required
                   placeholder="e.g., m.jones"
                   value={newStaff.username}
-                  onChange={(e) => setNewStaff({ ...newStaff, username: e.target.value.toLowerCase().trim() })}
+                  onChange={(e) => setNewStaff({ ...newStaff, username: e.target.value })}
                   className="w-full p-3 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all"
                 />
               </div>
