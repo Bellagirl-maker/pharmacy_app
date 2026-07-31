@@ -254,6 +254,9 @@ export default function App() {
       if (response.data.success) {
         const assignedRole = response.data.role || 'counter';
         const userHandler = username.toLowerCase().trim();
+
+        // Store manager ID so api.js can send it as a header on every request
+        localStorage.setItem('manager_id', response.data.id);
         
         setIsAuthenticated(true);
         setUserRole(assignedRole); 
@@ -270,6 +273,13 @@ export default function App() {
     } catch (err) {
       setLoginError(err.response?.data?.error || 'Invalid credentials.');
     }
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem('manager_id');
+    setIsAuthenticated(false);
+    setUserRole(null);
+    setActiveUsername('');
   };
 
   const handlePasswordChangeSubmit = async (e) => {
@@ -312,7 +322,7 @@ export default function App() {
         isAuthenticated={isAuthenticated} 
         userRole={userRole}
         activeUsername={activeUsername}
-        handleLogout={() => { setIsAuthenticated(false); setUserRole(null); }} 
+        handleLogout={handleLogout}
         orders={orders}
         onOpenChangePassword={() => setShowPasswordModal(true)}
         isNetworkOnline={isNetworkOnline}
