@@ -9,7 +9,7 @@ export const syncEngine = {
   submitOrder: async (orderPayload) => {
     if (navigator.onLine) {
       try {
-        const response = await api.post(`${API_BASE_URL}/orders`, orderPayload);
+        const response = await api.post(`/orders`, orderPayload);
         return { success: true, offline: false, data: response.data };
       } catch (err) {
         // If the server responded with 400 (e.g. Out of Stock), DO NOT queue offline.
@@ -56,7 +56,7 @@ export const syncEngine = {
         // Strip temp IndexedDB keys before pushing to Rails backend
         const { tempId, synced, offline_created, ...payload } = order;
 
-        await api.post(`${API_BASE_URL}/orders`, payload);
+        await api.post(`/orders`, payload);
 
         // Remove successfully synced item from IndexedDB
         await db.offlineOrders.delete(order.tempId);
