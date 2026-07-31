@@ -77,4 +77,17 @@ Rails.application.configure do
   #
   # Skip DNS rebinding protection for the default health check endpoint.
   # config.host_authorization = { exclude: ->(request) { request.path == "/up" } }
+  # --- ActionCable & WebSockets Configuration ---
+  
+  # 1. Mount ActionCable URL for production
+  config.action_cable.url = "wss://pharmacy-backend-ywps.onrender.com/cable"
+
+  # 2. Allow WebSocket requests from your Render frontend domain
+  config.action_cable.allowed_request_origins = [
+    "https://pharmacy-frontend-krpu.onrender.com",
+    /https:\/\/pharmacy-frontend-krpu\.onrender\.com.*/
+  ]
+
+  # 3. Disable request origin checking completely if testing (Optional fallback)
+  # config.action_cable.disable_request_forging = true
 end
