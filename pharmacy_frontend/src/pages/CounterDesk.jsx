@@ -28,7 +28,7 @@ function CounterDesk() {
     // 1. Try online fetch if browser reports connectivity
     if (navigator.onLine) {
       try {
-        const response = await axios.get(`${API_BASE_URL}/medicines?search=${encodeURIComponent(searchQuery)}`);
+        const response = await api.get(`${API_BASE_URL}/medicines?search=${encodeURIComponent(searchQuery)}`);
         setMedicines(response.data);
         return;
       } catch (error) {
