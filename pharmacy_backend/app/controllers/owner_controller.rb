@@ -25,14 +25,16 @@ class OwnerController < ApplicationController
 
     # 4. Void Log Audit Trail Collection
     @void_logs = Order.where(status: 'cancelled')
-                      .order(updated_at: :desc)
-                      .map do |order|
-                        {
-                          id: order.id,
-                          total_amount: order.total_amount,
-                          voided_at: order.updated_at.strftime("%I:%M %p (%d %b)")
-                        }
-                      end
+                  .order(updated_at: :desc)
+                  .map do |order|
+                    audit = AuditLog.where(trackable: order, action_type: 'ORDER_CANCELLED').last
+                    {
+                      id: order.id,
+                      total_amount: order.total_amount,
+                      voided_at: order.updated_at.strftime("%I:%M %p (%d %b)"),
+                      voided_by: audit&.manager&.username || 'unknown'
+                    }
+                  end
 
     # 🔍 5. NEW: Complete Staff Activity Audit Trail Collection
     # Eager loading :manager and :trackable to prevent N+1 query performance drops
