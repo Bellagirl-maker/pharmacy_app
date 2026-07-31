@@ -4,9 +4,9 @@ class ApplicationController < ActionController::API
   include ActionController::Cookies
 
   def current_manager
-    # Read from the encrypted Rails session cookie
-    @current_manager ||= Manager.find_by(id: session[:manager_id]) if session[:manager_id]
-  end
+  manager_id = session[:manager_id] || request.headers['X-Manager-Id']
+  @current_manager ||= Manager.find_by(id: manager_id) if manager_id
+end
 
   def logged_in?
     !!current_manager

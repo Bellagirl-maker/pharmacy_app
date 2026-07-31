@@ -13,10 +13,11 @@ class SessionsController < ApplicationController
 
       # 🎯 STEP 2: Pass the properties out to React so the ProtectedGate components unlock!
       render json: { 
-        success: true, 
-        username: manager.username,
-        role: manager.role 
-      }, status: :ok
+  success: true,
+  id: manager.id,
+  username: manager.username,
+  role: manager.role 
+}, status: :ok
     else
       render json: { error: "Invalid management username or password" }, status: :unauthorized
     end
