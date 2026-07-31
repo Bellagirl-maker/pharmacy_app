@@ -4,7 +4,7 @@ class ApplicationController < ActionController::API
   include ActionController::Cookies
 
   def current_manager
-  manager_id = session[:manager_id] || request.headers['X-Manager-Id']
+  manager_id = request.headers['X-Manager-Id'] || session[:manager_id]
   @current_manager ||= Manager.find_by(id: manager_id) if manager_id
 end
 
