@@ -168,8 +168,16 @@ function CounterDesk() {
       
       {/* LEFT & CENTER COLUMNS: Stock Search Sheet */}
       <div className="md:col-span-2 bg-white p-6 rounded-lg shadow-md">
-        <h2 className="text-2xl font-bold text-blue-600 mb-2">Counter Desk Module</h2>
-        <p className="text-gray-600 mb-6">Build customer orders and view live inventory status below.</p>
+        <div className="flex justify-between items-center mb-2">
+  <h2 className="text-2xl font-bold text-blue-600">Counter Desk Module</h2>
+  <button
+    onClick={fetchMedicines}
+    className="flex items-center gap-2 text-sm font-bold text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 px-3 py-1.5 rounded-lg border border-blue-200 transition-all"
+  >
+    🔄 Refresh Stock
+  </button>
+</div>
+<p className="text-gray-600 mb-6">Build customer orders and view live inventory status below.</p>
 
         {/* Search Bar */}
         <div className="mb-6">

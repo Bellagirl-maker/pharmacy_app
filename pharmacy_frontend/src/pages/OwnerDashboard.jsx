@@ -268,10 +268,18 @@ export default function OwnerDashboard({ orders = [] }) {
     <div className="max-w-7xl mx-auto px-6 py-6">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center border-b pb-5 mb-6 gap-4">
         <div>
-          <h2 className="text-2xl font-black text-gray-800 tracking-tight">Owner Control Tower</h2>
-          <p className="text-xs text-gray-500">
-            Audit system performance, process inventory analytics, and manage active staff clearances.
-          </p>
+          <div className="flex items-center gap-3">
+  <h2 className="text-2xl font-black text-gray-800 tracking-tight">Owner Control Tower</h2>
+  <button
+    onClick={fetchDashboardData}
+    className="flex items-center gap-2 text-sm font-bold text-gray-600 hover:text-gray-900 bg-gray-100 hover:bg-gray-200 px-3 py-1.5 rounded-lg border border-gray-200 transition-all"
+  >
+    🔄 Refresh
+  </button>
+</div>
+<p className="text-xs text-gray-500">
+  Audit system performance, process inventory analytics, and manage active staff clearances.
+</p>
         </div>
 
         <div className="flex bg-gray-200/80 p-1 rounded-xl border border-gray-300/30">
