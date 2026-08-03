@@ -45,7 +45,7 @@ const isToday = (dateString) => {
   );
 };
 
-export default function OwnerDashboard({ orders = [] }) {
+export default function OwnerDashboard({ orders = [], isNetworkOnline })  {
   const [activeTab, setActiveTab] = useState('analytics');
 
   const [data, setData] = useState({
@@ -306,11 +306,16 @@ export default function OwnerDashboard({ orders = [] }) {
         </div>
       </div>
 
-      {errorMessage && (
-        <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-xl flex items-center gap-3 text-sm font-semibold text-red-700">
-          <span>⚠️</span> <p>{errorMessage}</p>
-        </div>
-      )}
+      {!isNetworkOnline && (
+  <div className="mb-6 p-4 bg-amber-50 border border-amber-200 rounded-xl flex items-center gap-3 text-sm font-semibold text-amber-700">
+    <span>📴</span> <p>Offline Mode — showing last cached data. Connect to internet to refresh.</p>
+  </div>
+)}
+{errorMessage && isNetworkOnline && (
+  <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-xl flex items-center gap-3 text-sm font-semibold text-red-700">
+    <span>⚠️</span> <p>{errorMessage}</p>
+  </div>
+)}
 
       {activeTab === 'analytics' && (
         <div className="space-y-6">

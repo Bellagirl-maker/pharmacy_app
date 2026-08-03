@@ -115,11 +115,12 @@ function CounterDesk() {
     setIsSubmitting(true);
     try {
       const formattedItems = cart.map((item) => ({
-        medicine_id: item.id,
-        quantity: item.quantity,
-        price: item.price,
-        price_at_sale: item.price
-      }));
+  medicine_id: item.id,
+  name: item.name,
+  quantity: item.quantity,
+  price: item.price,
+  price_at_sale: item.price
+}));
 
       // Combined payload structure to support Rails nested attributes, params[:order][:items], or params[:items]
       const payload = {

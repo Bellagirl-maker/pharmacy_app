@@ -333,12 +333,12 @@ export default function App() {
         <Routes>
           <Route path="/" element={
             <ProtectedGate isAuthenticated={isAuthenticated} userRole={userRole} allowedRoles={['counter', 'owner']} onOpenLogin={() => setShowLoginModal(true)}>
-              <CounterDesk />
+              <CounterDesk isNetworkOnline={isNetworkOnline} />
             </ProtectedGate>
           } />
           <Route path="/cashier" element={
             <ProtectedGate isAuthenticated={isAuthenticated} userRole={userRole} allowedRoles={['cashier', 'owner']} onOpenLogin={() => setShowLoginModal(true)}>
-              <CashierDesk orders={orders} fetchOrders={fetchOrders} />
+              <CashierDesk orders={orders} fetchOrders={fetchOrders} isNetworkOnline={isNetworkOnline} />
             </ProtectedGate>
           } />
           <Route path="/inventory" element={
@@ -348,7 +348,7 @@ export default function App() {
           } />
           <Route path="/owner" element={
             <ProtectedGate isAuthenticated={isAuthenticated} userRole={userRole} allowedRoles={['owner']} onOpenLogin={() => setShowLoginModal(true)}>
-              <OwnerDashboard orders={orders} />
+              <OwnerDashboard orders={orders} isNetworkOnline={isNetworkOnline} />
             </ProtectedGate>
           } />
         </Routes>
