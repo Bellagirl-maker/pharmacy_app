@@ -4,7 +4,6 @@ import { db, deductLocalStock } from '../db/indexedDB';
 export const syncEngine = {
   isOnline: () => navigator.onLine,
 
-  // Submit order — online or offline
   submitOrder: async (orderPayload) => {
     if (navigator.onLine) {
       try {
@@ -23,8 +22,11 @@ export const syncEngine = {
     const items = orderPayload.items || [];
     const totalAmount = orderPayload.order?.total_amount || 0;
 
-    // Build order_items in the same shape CashierDesk expects so it can
-    // display offline orders without any extra transformation.
+    // Capture who is creating this order RIGHT NOW so attribution
+    // is correct when the order syncs later (even if a different
+    // user is logged in at sync time).
+    const creatorManagerId = localStorage.getItem('manager_id');
+
     const orderItems = items.map((item) => ({
       medicine_id: item.medicine_id,
       medicine: { name: item.name || `Medicine #${item.medicine_id}` },
@@ -35,8 +37,9 @@ export const syncEngine = {
     const offlineRecord = {
       status: 'pending',
       total_amount: totalAmount,
-      order_items: orderItems,   // display-ready shape for CashierDesk
-      raw_payload: orderPayload, // original payload kept for sync
+      order_items: orderItems,
+      creator_manager_id: creatorManagerId, // preserved for correct attribution on sync
+      raw_payload: orderPayload,
       created_at: new Date().toISOString(),
       offline_created: true,
       synced: 0
@@ -44,8 +47,7 @@ export const syncEngine = {
 
     const tempId = await db.offlineOrders.add(offlineRecord);
 
-    // Immediately deduct from local medicine cache so Counter Desk
-    // stock levels update without waiting for the server.
+    // Immediately deduct from local medicine cache
     await deductLocalStock(items);
 
     return {
@@ -55,7 +57,6 @@ export const syncEngine = {
     };
   },
 
-  // Flush queued offline orders to backend when reconnected
   flushOfflineQueue: async () => {
     if (!navigator.onLine) return;
 
@@ -66,11 +67,16 @@ export const syncEngine = {
 
     for (const order of pendingOrders) {
       try {
-        // Use the original raw payload for the API call
-        const payload = order.raw_payload || order;
-        const { tempId, synced, offline_created, raw_payload, order_items, ...cleanPayload } = payload;
+        // Use the original creator's manager ID for correct attribution,
+        // not whoever happens to be logged in at sync time.
+        const syncHeaders = order.creator_manager_id
+          ? { 'X-Manager-Id': order.creator_manager_id }
+          : {};
 
-        await api.post('/orders', order.raw_payload || cleanPayload);
+        await api.post('/orders', order.raw_payload || order, {
+          headers: syncHeaders
+        });
+
         await db.offlineOrders.delete(order.tempId);
         console.log(`✅ Synced offline order #${order.tempId}`);
       } catch (err) {
