@@ -163,7 +163,6 @@ export default function App() {
   const [orders, setOrders] = useState([]);
 
   // --- Restore auth session from localStorage on app load ---
-  // This prevents browser refresh from logging the user out.
   useEffect(() => {
     const savedAuth = localStorage.getItem('pharmacy_auth');
     if (savedAuth) {
@@ -255,16 +254,20 @@ export default function App() {
     setLoginError(null);
 
     const usernameInput = username.toLowerCase().trim();
+    const passwordHash = btoa(password);
 
-    // --- OFFLINE LOGIN: use cached credentials ---
+    // --- OFFLINE LOGIN ---
     if (!navigator.onLine) {
       const savedAuth = localStorage.getItem('pharmacy_auth');
       if (savedAuth) {
         try {
           const cached = JSON.parse(savedAuth);
           if (cached.username === usernameInput) {
-            // Allow offline access with matching username
-            // Note: password is not verified offline for practicality
+            if (cached.passwordHash && cached.passwordHash !== passwordHash) {
+              setLoginError('Incorrect password for offline access.');
+              return;
+            }
+
             localStorage.setItem('manager_id', cached.id);
             setIsAuthenticated(true);
             setUserRole(cached.role);
@@ -272,13 +275,14 @@ export default function App() {
             setShowLoginModal(false);
             setUsername('');
             setPassword('');
+
             if (cached.role === 'inventory') navigate('/inventory');
             else if (cached.role === 'cashier') navigate('/cashier');
             else if (cached.role === 'owner') navigate('/owner');
             else navigate('/');
             return;
           } else {
-            setLoginError('Offline mode: only the last logged-in user can access the system.');
+            setLoginError(`Offline mode: only the last logged-in user (${cached.username}) can access this workstation.`);
             return;
           }
         } catch {
@@ -297,12 +301,12 @@ export default function App() {
       if (response.data.success) {
         const assignedRole = response.data.role || 'counter';
 
-        // Persist auth so browser refresh doesn't log the user out
         localStorage.setItem('manager_id', response.data.id);
         localStorage.setItem('pharmacy_auth', JSON.stringify({
           id: response.data.id,
           username: usernameInput,
-          role: assignedRole
+          role: assignedRole,
+          passwordHash: passwordHash
         }));
 
         setIsAuthenticated(true);
@@ -324,7 +328,7 @@ export default function App() {
 
   const handleLogout = () => {
     localStorage.removeItem('manager_id');
-    localStorage.removeItem('pharmacy_auth');
+    // Preserve 'pharmacy_auth' in localStorage so the user can verify credentials offline
     setIsAuthenticated(false);
     setUserRole(null);
     setActiveUsername('');
