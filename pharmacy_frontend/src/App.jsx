@@ -23,9 +23,15 @@ function NavigationHeader({
 }) {
   const location = useLocation();
 
-  const pendingCount = orders.filter(
-    (order) => order.status === 'pending' || order.status === 'draft'
-  ).length;
+  // Filter pending cashier orders while excluding completed/voided statuses
+  const pendingCount = orders.filter((order) => {
+    const status = order.status?.toLowerCase();
+    return (status === 'pending' || status === 'created' || status === 'draft') &&
+           status !== 'voided' &&
+           status !== 'cancelled' &&
+           status !== 'paid' &&
+           status !== 'dispensed';
+  }).length;
 
   const linkClass = (path) => `
     px-4 py-2 rounded-md font-bold text-sm transition-all flex items-center gap-2
@@ -242,7 +248,7 @@ export default function App() {
         } else if (data.event === 'order_paid' || data.event === 'order_dispensed') {
           setOrders(prev => prev.map(o => o.id === data.order.id ? { ...o, ...data.order } : o));
         } else if (data.event === 'order_voided' && data.order) {
-          setOrders(prev => prev.map(o => o.id === data.order.id ? { ...o, status: 'VOIDED', ...data.order } : o));
+          setOrders(prev => prev.map(o => o.id === data.order.id ? { ...o, ...data.order, status: 'cancelled' } : o));
         }
       }
     });
@@ -328,7 +334,6 @@ export default function App() {
 
   const handleLogout = () => {
     localStorage.removeItem('manager_id');
-    // Preserve 'pharmacy_auth' in localStorage so the user can verify credentials offline
     setIsAuthenticated(false);
     setUserRole(null);
     setActiveUsername('');
