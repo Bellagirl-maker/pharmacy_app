@@ -5,39 +5,59 @@ class OwnerController < ApplicationController
 
   def dashboard
     # 1. Financials Summary (Gross Sales Today)
+    # Uses Time.current range to handle timezone boundaries properly against UTC database timestamps
+    today_range = Time.current.beginning_of_day..Time.current.end_of_day
+    
     @today_sales = Order.where(status: ['paid', 'dispensed'])
-                        .where('updated_at >= ?', Date.current.beginning_of_day)
+                        .where(updated_at: today_range)
                         .sum(:total_amount)
 
     # 2. Safety Inventory Triggers
-    @low_stock = Medicine.all.select { |m| m.total_stock < 20 }.map do |m|
-      { name: m.name, stock: m.total_stock }
-    end
+    # Performs filtering directly at the database level to avoid loading all records into Ruby memory
+    @low_stock = Medicine.left_joins(:batches)
+                         .group('medicines.id')
+                         .having('COALESCE(SUM(batches.quantity), 0) < 20')
+                         .map do |m|
+                           { name: m.name, stock: m.batches.sum(:quantity) }
+                         end
 
     # 3. Compliance Expiration Audits
-    @expiring_soon = Batch.where(expiry_date: Date.current..(Date.current + 90.days)).map do |b|
-      { medicine_name: b.medicine.name, batch: b.batch_number, expires_on: b.expiry_date.to_s, quantity: b.quantity }
-    end
+    @expiring_soon = Batch.includes(:medicine)
+                          .where(expiry_date: Date.current..(Date.current + 90.days))
+                          .map do |b|
+                            { 
+                              medicine_name: b.medicine.name, 
+                              batch: b.batch_number, 
+                              expires_on: b.expiry_date.to_s, 
+                              quantity: b.quantity 
+                            }
+                          end
 
-    @expired = Batch.where('expiry_date <= ?', Date.current).map do |b|
-      { medicine_name: b.medicine.name, batch: b.batch_number, expired_on: b.expiry_date.to_s, quantity: b.quantity }
-    end
+    @expired = Batch.includes(:medicine)
+                    .where('expiry_date <= ?', Date.current)
+                    .map do |b|
+                      { 
+                        medicine_name: b.medicine.name, 
+                        batch: b.batch_number, 
+                        expired_on: b.expiry_date.to_s, 
+                        quantity: b.quantity 
+                      }
+                    end
 
     # 4. Void Log Audit Trail Collection
     @void_logs = Order.where(status: 'cancelled')
-                  .order(updated_at: :desc)
-                  .map do |order|
-                    audit = AuditLog.where(trackable: order, action_type: 'ORDER_CANCELLED').last
-                    {
-                      id: order.id,
-                      total_amount: order.total_amount,
-                      voided_at: order.updated_at.strftime("%I:%M %p (%d %b)"),
-                      voided_by: audit&.manager&.username || 'unknown'
-                    }
-                  end
+                      .order(updated_at: :desc)
+                      .map do |order|
+                        audit = AuditLog.where(trackable: order, action_type: 'ORDER_CANCELLED').last
+                        {
+                          id: order.id,
+                          total_amount: order.total_amount,
+                          voided_at: order.updated_at.strftime("%I:%M %p (%d %b)"),
+                          voided_by: audit&.manager&.username || 'unknown'
+                        }
+                      end
 
-    # 🔍 5. NEW: Complete Staff Activity Audit Trail Collection
-    # Eager loading :manager and :trackable to prevent N+1 query performance drops
+    # 5. Complete Staff Activity Audit Trail Collection
     @audit_logs = AuditLog.includes(:manager, :trackable)
                           .order(created_at: :desc)
                           .limit(50)
@@ -59,7 +79,7 @@ class OwnerController < ApplicationController
       expiring_soon: @expiring_soon,
       expired_alerts: @expired,
       void_logs: @void_logs,
-      audit_logs: @audit_logs # Shipped directly to React!
+      audit_logs: @audit_logs
     }
   end
 
