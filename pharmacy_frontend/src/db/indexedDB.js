@@ -11,6 +11,10 @@ db.version(1).stores({
 // Helper to seed or update inventory cache from Rails
 export const cacheMedicinesLocally = async (medicinesList) => {
   if (!Array.isArray(medicinesList)) return;
+  
+  // Clear the entire table first, then repopulate with fresh data
+  // This ensures deleted medicines don't linger in the offline cache
+  await db.medicines.clear();
   await db.medicines.bulkPut(medicinesList);
 };
 
