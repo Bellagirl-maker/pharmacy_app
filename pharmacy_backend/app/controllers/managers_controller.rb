@@ -31,15 +31,18 @@ class ManagersController < ApplicationController
 
   # 4. DELETE /managers/:id - Owner deprovisions a staff account
   def destroy
-    staff = Manager.find(params[:id])
-    if staff == current_manager
-      render json: { error: "You cannot delete your own administrative owner account!" }, status: :bad_request
-    elsif staff.destroy
-      render json: { success: true, message: "Staff account removed from database." }
-    else
-      render json: { error: "Failed to delete account." }, status: :unprocessable_entity
-    end
+  staff = Manager.find(params[:id])
+  if staff.username == 'admin'
+    render json: { error: "The master admin account cannot be deleted." }, status: :forbidden
+    return
+  elsif staff == current_manager
+    render json: { error: "You cannot delete your own administrative owner account!" }, status: :bad_request
+  elsif staff.destroy
+    render json: { success: true, message: "Staff account removed from database." }
+  else
+    render json: { error: "Failed to delete account." }, status: :unprocessable_entity
   end
+end
 
   # 5. PATCH /profile/change_password - Self-service password update (Clears forced flag)
   def change_password
@@ -56,15 +59,18 @@ class ManagersController < ApplicationController
 
   # 6. POST /managers/:id/reset_password - Owner resets an employee's password
   def reset_password
-    staff = Manager.find(params[:id])
-    temp_password = params[:temp_password] || "ChangeMe123!"
-
-    if staff.update(password: temp_password, must_change_password: true)
-      render json: { success: true, message: "Password reset for #{staff.username}. Forced change flag active." }
-    else
-      render json: { error: staff.errors.full_messages.join(', ') }, status: :unprocessable_entity
-    end
+  staff = Manager.find(params[:id])
+  if staff.username == 'admin'
+    render json: { error: "The master admin account cannot be reset." }, status: :forbidden
+    return
   end
+  temp_password = params[:temp_password] || "ChangeMe123!"
+  if staff.update(password: temp_password, must_change_password: true)
+    render json: { success: true, message: "Password reset for #{staff.username}. Forced change flag active." }
+  else
+    render json: { error: staff.errors.full_messages.join(', ') }, status: :unprocessable_entity
+  end
+end
 
   private
 
