@@ -1,367 +1,363 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import api from '../api';
-import { formatCurrency } from '../utils/formatters';
+import { db } from '../db/indexedDB';
 import InventoryBulkImport from '../components/InventoryBulkImport';
-import { db } from '../db/indexedDB'; // Dexie/IndexedDB instance
 
+const UNITS = ['tablet', 'strip', 'bottle', 'sachet', 'vial', 'box', 'tube', 'injection', 'cream', 'capsule'];
 
-export default function InventoryDesk() {
-  const [inventory, setInventory] = useState([]);
-  const [searchTerm, setSearchTerm] = useState('');
+const EMPTY_FORM = { name: '', price: '', unit: 'tablet', shelf_location: '' };
+
+export default function InventoryDesk({ isNetworkOnline }) {
+  const [medicines, setMedicines]         = useState([]);
+  const [search, setSearch]               = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
-  const [isLoading, setIsLoading] = useState(true);
-  const [deletingBatchId, setDeletingBatchId] = useState(null);
-  const [deletingMedicineId, setDeletingMedicineId] = useState(null);
-  const [isOffline, setIsOffline] = useState(!navigator.onLine);
-  
-  // Toggle bulk import modal panel
-  const [showImportModal, setShowImportModal] = useState(false);
+  const [isLoading, setIsLoading]         = useState(true);
+  const [showImport, setShowImport]       = useState(false);
 
-  // Debounce search term changes
+  // Add / Edit form state
+  const [showForm, setShowForm]           = useState(false);
+  const [editingMedicine, setEditingMedicine] = useState(null); // null = adding new
+  const [form, setForm]                   = useState(EMPTY_FORM);
+  const [formError, setFormError]         = useState(null);
+  const [formLoading, setFormLoading]     = useState(false);
+
+  // Debounce search
   useEffect(() => {
-    const timerId = setTimeout(() => {
-      setDebouncedSearch(searchTerm);
-    }, 300);
-    return () => clearTimeout(timerId);
-  }, [searchTerm]);
+    const t = setTimeout(() => setDebouncedSearch(search), 400);
+    return () => clearTimeout(t);
+  }, [search]);
 
-  // Track network connectivity state
-  useEffect(() => {
-    const handleOnline = () => setIsOffline(false);
-    const handleOffline = () => setIsOffline(true);
-
-    window.addEventListener('online', handleOnline);
-    window.addEventListener('offline', handleOffline);
-
-    return () => {
-      window.removeEventListener('online', handleOnline);
-      window.removeEventListener('offline', handleOffline);
-    };
-  }, []);
-
-  // --- FETCH INVENTORY (HYBRID OFFLINE/ONLINE) ---
-  const fetchInventory = async () => {
+  const fetchMedicines = useCallback(async () => {
     setIsLoading(true);
-
-    // 1. Try Online API Request
-    if (navigator.onLine) {
-      try {
-        const response = await api.get(`/medicines?search=${encodeURIComponent(debouncedSearch)}`);
-        const remoteData = response.data || [];
-        
-        setInventory(remoteData);
-        setIsOffline(false);
-
-        // Populate/Sync remote data into local Dexie cache when non-empty
-        if (remoteData.length > 0 && !debouncedSearch) {
-          await db.medicines.clear();
-          await db.medicines.bulkPut(remoteData);
-        }
-        setIsLoading(false);
-        return;
-      } catch (err) {
-        console.warn('Network request failed. Falling back to local IndexedDB store:', err);
-      }
-    }
-
-    // 2. Offline Fallback (Read from IndexedDB)
-    setIsOffline(true);
     try {
-      const localMedicines = await db.medicines.toArray();
-      
-      if (!debouncedSearch.trim()) {
-        setInventory(localMedicines);
+      if (isNetworkOnline) {
+        const res = await api.get(`/medicines?search=${encodeURIComponent(debouncedSearch)}`);
+        setMedicines(res.data || []);
       } else {
-        const query = debouncedSearch.toLowerCase();
-        const filtered = localMedicines.filter((med) =>
-          med.name?.toLowerCase().includes(query)
-        );
-        setInventory(filtered);
+        const local = await db.medicines.toArray();
+        const filtered = debouncedSearch
+          ? local.filter(m => m.name.toLowerCase().includes(debouncedSearch.toLowerCase()))
+          : local;
+        setMedicines(filtered);
       }
-    } catch (dbErr) {
-      console.error('Failed to query local IndexedDB medicines store:', dbErr);
+    } catch (err) {
+      console.error('Failed to fetch medicines:', err);
     } finally {
       setIsLoading(false);
     }
+  }, [debouncedSearch, isNetworkOnline]);
+
+  useEffect(() => { fetchMedicines(); }, [fetchMedicines]);
+
+  const openAddForm = () => {
+    setEditingMedicine(null);
+    setForm(EMPTY_FORM);
+    setFormError(null);
+    setShowForm(true);
   };
 
-  useEffect(() => {
-    fetchInventory();
-  }, [debouncedSearch, isOffline]);
+  const openEditForm = (medicine) => {
+    setEditingMedicine(medicine);
+    setForm({
+      name:           medicine.name || '',
+      price:          medicine.price || '',
+      unit:           medicine.unit || 'tablet',
+      shelf_location: medicine.shelf_location || '',
+    });
+    setFormError(null);
+    setShowForm(true);
+  };
 
-  // --- DELETE ENTIRE MEDICINE HANDLER ---
-  const handleDeleteMedicine = async (medicineId, medicineName) => {
-    const isConfirmed = window.confirm(
-      `Are you sure you want to completely remove "${medicineName}" from the system?\n\nThis will remove it from both Inventory Desk and Counter Desk.`
-    );
+  const closeForm = () => {
+    setShowForm(false);
+    setEditingMedicine(null);
+    setForm(EMPTY_FORM);
+    setFormError(null);
+  };
 
-    if (!isConfirmed) return;
+  const handleFormSubmit = async (e) => {
+    e.preventDefault();
+    setFormError(null);
+    setFormLoading(true);
 
-    setDeletingMedicineId(medicineId);
-
-    // Online execution
-    if (navigator.onLine) {
-      try {
-        await api.delete(`/medicines/${medicineId}`);
-        // Also remove from local store
-        await db.medicines.delete(medicineId);
-        await fetchInventory();
-        return;
-      } catch (err) {
-        console.error('Failed to delete medicine online:', err);
-        alert('Failed to delete medicine on server.');
-      } finally {
-        setDeletingMedicineId(null);
+    try {
+      if (editingMedicine) {
+        await api.patch(`/medicines/${editingMedicine.id}`, { medicine: form });
+      } else {
+        await api.post('/medicines', { medicine: form });
       }
-    } else {
-      // Offline execution
-      try {
-        await db.medicines.delete(medicineId);
-        await fetchInventory();
-      } catch (err) {
-        console.error('Failed to delete medicine locally:', err);
-      } finally {
-        setDeletingMedicineId(null);
-      }
+      closeForm();
+      fetchMedicines();
+    } catch (err) {
+      setFormError(err.response?.data?.error || 'Failed to save medicine.');
+    } finally {
+      setFormLoading(false);
     }
   };
 
-  // --- DELETE INDIVIDUAL BATCH HANDLER ---
-  const handleDeleteBatch = async (medicineId, batchId, batchNumber) => {
-    if (!batchId) {
-      alert("Cannot delete batch: Missing Batch ID from API response.");
-      return;
+  const handleDelete = async (medicineId, medicineName) => {
+    if (!window.confirm(`Are you sure you want to delete ${medicineName} and all its batches?`)) return;
+    try {
+      await api.delete(`/medicines/${medicineId}`);
+      fetchMedicines();
+    } catch (err) {
+      alert(err.response?.data?.error || 'Failed to delete medicine.');
     }
+  };
 
-    const isConfirmed = window.confirm(
-      `Are you sure you want to remove batch "${batchNumber}"?`
-    );
+  const totalStock = (medicine) => {
+    if (!medicine.batches || medicine.batches.length === 0) return 0;
+    const today = new Date();
+    return medicine.batches
+      .filter(b => new Date(b.expiry_date) > today)
+      .reduce((sum, b) => sum + (b.quantity || 0), 0);
+  };
 
-    if (!isConfirmed) return;
-
-    setDeletingBatchId(batchId);
-
-    // Helper to purge batch locally from Dexie cache
-    const removeBatchLocally = async () => {
-      const med = await db.medicines.get(medicineId);
-      if (med && med.batches) {
-        const updatedBatches = med.batches.filter(
-          (b) => (b.id || b.batch_id) !== batchId
-        );
-        await db.medicines.update(medicineId, { batches: updatedBatches });
-      }
-    };
-
-    if (navigator.onLine) {
-      try {
-        await api.delete(`/batches/${batchId}`);
-        await removeBatchLocally();
-        await fetchInventory();
-      } catch (err) {
-        console.error('Failed to delete batch online:', err);
-        alert('Failed to delete batch from server.');
-      } finally {
-        setDeletingBatchId(null);
-      }
-    } else {
-      try {
-        await removeBatchLocally();
-        await fetchInventory();
-      } catch (err) {
-        console.error('Failed to remove batch locally:', err);
-      } finally {
-        setDeletingBatchId(null);
-      }
-    }
+  const stockColor = (qty) => {
+    if (qty === 0) return '#ef4444';
+    if (qty <= 20) return '#f59e0b';
+    return '#22c55e';
   };
 
   return (
-    <div className="p-6 max-w-7xl mx-auto space-y-6">
-      {/* HEADER SECTION */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b pb-4">
-        <div>
-          <h2 className="text-2xl font-black text-gray-800 tracking-tight flex items-center gap-2">
-            📦 Inventory Control Desk
-            {isOffline && (
-              <span className="text-xs bg-amber-100 text-amber-800 font-bold px-2.5 py-0.5 rounded-full border border-amber-300">
-                Offline Mode (IndexedDB)
-              </span>
-            )}
-          </h2>
-          <p className="text-sm text-gray-500">Track pharmaceutical stock levels, batch lots, and supply chains.</p>
+    <div className="max-w-7xl mx-auto px-6 py-6">
+
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
+        <div className="flex items-center gap-3">
+          <h2 className="text-2xl font-black text-gray-800">Inventory Control Desk</h2>
+          <span className={`text-xs font-bold px-2.5 py-1 rounded-full border ${
+            isNetworkOnline
+              ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+              : 'bg-amber-50 text-amber-700 border-amber-200'
+          }`}>
+            {isNetworkOnline ? 'Live' : 'Offline Mode (IndexedDB)'}
+          </span>
         </div>
-        
-        <button
-          onClick={() => setShowImportModal(true)}
-          disabled={isOffline}
-          className={`px-4 py-2 rounded-lg font-bold text-sm shadow-sm transition-all flex items-center gap-2 ${
-            isOffline 
-              ? 'bg-gray-300 text-gray-500 cursor-not-allowed' 
-              : 'bg-blue-600 hover:bg-blue-700 text-white'
-          }`}
-          title={isOffline ? 'Batch import requires an active internet connection' : 'Import bulk inventory'}
-        >
-          <span>Mass CSV Import</span>
-          <span>📊</span>
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={openAddForm}
+            className="flex items-center gap-2 bg-teal-700 hover:bg-teal-800 text-white text-sm font-bold px-4 py-2 rounded-lg transition-all"
+          >
+            + Add Medicine
+          </button>
+          <button
+            onClick={() => setShowImport(v => !v)}
+            className="flex items-center gap-2 bg-white hover:bg-gray-50 text-gray-700 text-sm font-bold px-4 py-2 rounded-lg border border-gray-200 transition-all"
+          >
+            📊 Mass CSV Import
+          </button>
+          <button
+            onClick={fetchMedicines}
+            className="flex items-center gap-2 bg-white hover:bg-gray-50 text-blue-600 text-sm font-bold px-4 py-2 rounded-lg border border-blue-200 transition-all"
+          >
+            🔄 Refresh
+          </button>
+        </div>
       </div>
 
-      {/* SEARCH CONTROL */}
-      <div className="max-w-md">
-        <input
-          type="text"
-          placeholder="Search database by generic or brand name..."
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-          className="w-full p-2.5 border rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-        />
-      </div>
+      <p className="text-sm text-gray-500 mb-4">Track pharmaceutical stock levels, batch lots, and supply chains.</p>
 
-      {/* INVENTORY TABLE PANEL */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-        {isLoading && inventory.length === 0 ? (
-          <div className="p-12 text-center text-sm text-gray-400 font-medium">
-            Querying active stock database...
+      {/* Bulk Import */}
+      {showImport && (
+        <div className="mb-6">
+          <InventoryBulkImport onImportComplete={() => { setShowImport(false); fetchMedicines(); }} />
+        </div>
+      )}
+
+      {/* Add / Edit Form Modal */}
+      {showForm && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-xl border border-gray-100 w-full max-w-md p-6">
+            <div className="flex justify-between items-center mb-5">
+              <h3 className="text-lg font-black text-gray-900">
+                {editingMedicine ? `Edit ${editingMedicine.name}` : 'Add New Medicine'}
+              </h3>
+              <button onClick={closeForm} className="text-gray-400 hover:text-gray-600 font-bold text-lg">✕</button>
+            </div>
+
+            <form onSubmit={handleFormSubmit} className="space-y-4">
+              <div>
+                <label className="text-xs font-bold text-gray-500 uppercase tracking-wider block mb-1.5">
+                  Medicine Name *
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. Paracetamol 500mg"
+                  value={form.name}
+                  onChange={e => setForm({ ...form, name: e.target.value })}
+                  className="w-full p-3 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-bold text-gray-500 uppercase tracking-wider block mb-1.5">
+                    Price (GH₵) *
+                  </label>
+                  <input
+                    type="number"
+                    required
+                    min="0"
+                    step="0.01"
+                    placeholder="0.00"
+                    value={form.price}
+                    onChange={e => setForm({ ...form, price: e.target.value })}
+                    className="w-full p-3 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-xs font-bold text-gray-500 uppercase tracking-wider block mb-1.5">
+                    Unit *
+                  </label>
+                  <select
+                    value={form.unit}
+                    onChange={e => setForm({ ...form, unit: e.target.value })}
+                    className="w-full p-3 border border-gray-300 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-teal-500"
+                  >
+                    {UNITS.map(u => (
+                      <option key={u} value={u}>{u.charAt(0).toUpperCase() + u.slice(1)}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-gray-500 uppercase tracking-wider block mb-1.5">
+                  Shelf Location
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. Aisle 2, Shelf B"
+                  value={form.shelf_location}
+                  onChange={e => setForm({ ...form, shelf_location: e.target.value })}
+                  className="w-full p-3 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
+                />
+              </div>
+
+              {formError && (
+                <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-xs font-semibold text-red-600">
+                  {formError}
+                </div>
+              )}
+
+              <div className="flex gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={closeForm}
+                  className="w-1/2 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold py-3 rounded-xl text-sm"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={formLoading}
+                  className="w-1/2 bg-teal-700 hover:bg-teal-800 disabled:bg-gray-300 text-white font-bold py-3 rounded-xl text-sm transition-all"
+                >
+                  {formLoading ? 'Saving...' : editingMedicine ? 'Save Changes' : 'Add Medicine'}
+                </button>
+              </div>
+            </form>
           </div>
-        ) : (
-          <table className="w-full text-left border-collapse">
-            <thead>
-              <tr className="bg-gray-50 text-xs text-gray-400 font-bold uppercase border-b">
-                <th className="p-4">Item Description</th>
-                <th className="p-4">Unit Selling Price</th>
-                <th className="p-4">Active Batches</th>
-                <th className="p-4 text-right">Total Available Stock</th>
+        </div>
+      )}
+
+      {/* Search */}
+      <input
+        type="text"
+        placeholder="Search database by generic or brand name..."
+        value={search}
+        onChange={e => setSearch(e.target.value)}
+        className="w-full max-w-lg p-3 border border-gray-300 rounded-xl text-sm mb-6 focus:outline-none focus:ring-2 focus:ring-teal-500"
+      />
+
+      {/* Medicine Table */}
+      {isLoading ? (
+        <div className="text-center py-16 text-gray-400 font-medium">Loading inventory...</div>
+      ) : medicines.length === 0 ? (
+        <div className="text-center py-16 text-gray-400 font-medium">
+          No medicines found. Add one using the button above.
+        </div>
+      ) : (
+        <div className="bg-white border border-gray-200 rounded-2xl overflow-hidden shadow-xs">
+          <table className="min-w-full divide-y divide-gray-100 text-sm">
+            <thead className="bg-gray-50 text-xs font-bold text-gray-400 uppercase tracking-wider">
+              <tr>
+                <th className="px-5 py-4 text-left">Item Description</th>
+                <th className="px-5 py-4 text-left">Unit</th>
+                <th className="px-5 py-4 text-left">Unit Selling Price</th>
+                <th className="px-5 py-4 text-left">Active Batches</th>
+                <th className="px-5 py-4 text-right">Total Stock</th>
+                <th className="px-5 py-4 text-center">Actions</th>
               </tr>
             </thead>
-            <tbody>
-              {inventory.map((med) => {
-                const totalStock = med.batches?.reduce((sum, b) => sum + (b.quantity || 0), 0) ?? med.total_stock ?? 0;
-
+            <tbody className="divide-y divide-gray-100">
+              {medicines.map(medicine => {
+                const stock = totalStock(medicine);
                 return (
-                  <tr key={med.id} className="border-b hover:bg-gray-50/50 transition-colors">
-                    {/* MEDICINE NAME & ITEM DELETE ACTION */}
-                    <td className="p-4">
-                      <div className="flex items-center justify-between group/med pr-4">
-                        <div>
-                          <span className="font-bold text-gray-800 block">{med.name}</span>
-                          <span className="text-xs text-gray-400 block">ID Reference: #{med.id}</span>
-                        </div>
-                        
-                        {/* Delete Medicine Record Button */}
-                        <button
-                          type="button"
-                          onClick={() => handleDeleteMedicine(med.id, med.name)}
-                          disabled={deletingMedicineId === med.id}
-                          title="Permanently remove this medicine from system"
-                          className="text-xs font-semibold px-2 py-1 rounded bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 transition-all opacity-80 group-hover/med:opacity-100"
-                        >
-                          {deletingMedicineId === med.id ? 'Deleting...' : 'Delete Item'}
-                        </button>
-                      </div>
+                  <tr key={medicine.id} className="hover:bg-gray-50/50 transition-colors">
+                    <td className="px-5 py-4">
+                      <div className="font-bold text-gray-900">{medicine.name}</div>
+                      <div className="text-xs text-gray-400 font-mono">ID: #{medicine.id}</div>
+                      {medicine.shelf_location && (
+                        <div className="text-xs text-gray-400">{medicine.shelf_location}</div>
+                      )}
                     </td>
-
-                    {/* UNIT SELLING PRICE */}
-                    <td className="p-4 text-sm font-semibold text-gray-700">
-                      {formatCurrency(med.price || 0)}
+                    <td className="px-5 py-4">
+                      <span className="text-xs font-bold bg-gray-100 text-gray-600 px-2 py-1 rounded-md capitalize">
+                        {medicine.unit || 'tablet'}
+                      </span>
                     </td>
-                    
-                    {/* BATCH LOT PILLS WITH TRASH DELETE BUTTON */}
-                    <td className="p-4">
-                      <div className="flex flex-wrap gap-1.5 items-center">
-                        {med.batches?.map((b) => {
-                          const targetBatchId = b.id || b.batch_id;
-
-                          return (
+                    <td className="px-5 py-4 font-bold text-gray-700">
+                      GH₵ {Number(medicine.price || 0).toFixed(2)}
+                    </td>
+                    <td className="px-5 py-4">
+                      <div className="flex flex-wrap gap-1.5">
+                        {medicine.batches && medicine.batches.length > 0 ? (
+                          medicine.batches.map(batch => (
                             <span
-                              key={targetBatchId || b.batch_number}
-                              className="inline-flex items-center gap-1.5 bg-gray-100 hover:bg-gray-200/80 border border-gray-200 text-gray-700 text-[11px] font-semibold px-2 py-0.5 rounded transition-all group"
+                              key={batch.id}
+                              className="text-xs bg-gray-100 text-gray-600 font-mono px-2 py-1 rounded-md border border-gray-200"
                             >
-                              <span>
-                                {b.batch_number} ({b.quantity}u)
-                              </span>
-                              
-                              {/* Trash Button */}
-                              <button
-                                type="button"
-                                onClick={() => handleDeleteBatch(med.id, targetBatchId, b.batch_number)}
-                                disabled={deletingBatchId === targetBatchId}
-                                title="Delete this batch lot"
-                                className="text-gray-400 hover:text-red-600 focus:outline-none ml-0.5 transition-colors"
-                              >
-                                {deletingBatchId === targetBatchId ? (
-                                  <span className="text-[9px] animate-pulse">...</span>
-                                ) : (
-                                  <svg
-                                    className="w-3 h-3"
-                                    fill="none"
-                                    stroke="currentColor"
-                                    viewBox="0 0 24 24"
-                                  >
-                                    <path
-                                      strokeLinecap="round"
-                                      strokeLinejoin="round"
-                                      strokeWidth="2"
-                                      d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-                                    />
-                                  </svg>
-                                )}
-                              </button>
+                              {batch.batch_number} ({batch.quantity}u)
                             </span>
-                          );
-                        })}
-
-                        {(!med.batches || med.batches.length === 0) && (
-                          <span className="text-xs text-red-500 font-medium italic">
-                            No Active Lots
-                          </span>
+                          ))
+                        ) : (
+                          <span className="text-xs text-gray-400 italic">No batches</span>
                         )}
                       </div>
                     </td>
-
-                    {/* COMPUTED TOTAL STOCK */}
-                    <td className="p-4 text-right font-black text-sm text-gray-700">
-                      {totalStock} units
+                    <td className="px-5 py-4 text-right">
+                      <span
+                        className="text-sm font-black"
+                        style={{ color: stockColor(stock) }}
+                      >
+                        {stock} units
+                      </span>
+                    </td>
+                    <td className="px-5 py-4">
+                      <div className="flex items-center justify-center gap-2">
+                        <button
+                          onClick={() => openEditForm(medicine)}
+                          className="text-xs font-bold text-blue-600 hover:text-blue-800 hover:bg-blue-50 px-3 py-1.5 rounded-lg border border-blue-200 transition-all"
+                        >
+                          Edit
+                        </button>
+                        <button
+                          onClick={() => handleDelete(medicine.id, medicine.name)}
+                          className="text-xs font-bold text-red-500 hover:text-red-700 hover:bg-red-50 px-3 py-1.5 rounded-lg border border-red-200 transition-all"
+                        >
+                          Delete
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 );
               })}
-
-              {inventory.length === 0 && (
-                <tr>
-                  <td colSpan="4" className="text-center p-8 text-sm text-gray-400">
-                    No matching medicines found in inventory database.
-                  </td>
-                </tr>
-              )}
             </tbody>
           </table>
-        )}
-      </div>
-
-      {/* POP-UP BULK IMPORT MODAL INTERFACE */}
-      {showImportModal && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-xl shadow-2xl border max-w-xl w-full p-6 relative">
-            <button 
-              onClick={() => {
-                setShowImportModal(false);
-                fetchInventory();
-              }} 
-              className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 text-lg font-bold"
-            >
-              ✕
-            </button>
-
-            <div className="mb-4">
-              <h3 className="text-lg font-black text-gray-900">Spreadsheet Batch Processing</h3>
-              <p className="text-xs text-gray-500">Select or drop your formatted pharmacy CSV template spreadsheet below.</p>
-            </div>
-
-            <InventoryBulkImport onImportSuccess={() => {
-              setShowImportModal(false);
-              fetchInventory();
-            }} />
-          </div>
         </div>
       )}
     </div>

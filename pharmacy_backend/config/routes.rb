@@ -2,7 +2,11 @@ Rails.application.routes.draw do
   get "audit_logs/index"
   
   # Updated to include :destroy for deleting full medicine records
-  resources :medicines, only: [:index, :destroy]
+  resources :medicines, only: [:index, :create, :update, :destroy] do
+  member do
+    patch :update_stock
+  end
+end
   
   # Add this line for batch deletion support:
   resources :batches, only: [:destroy]
