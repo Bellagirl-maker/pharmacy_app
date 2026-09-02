@@ -198,6 +198,7 @@ function CounterDesk() {
             <thead>
               <tr className="border-b text-gray-500 text-sm">
                 <th className="pb-2">Medication Name</th>
+                <th className="pb-2">Unit</th>
                 <th className="pb-2">Price</th>
                 <th className="pb-2">Stock Level</th>
                 <th className="pb-2 text-right">Action</th>
@@ -210,6 +211,11 @@ function CounterDesk() {
                 return (
                   <tr key={med.id} className="border-b hover:bg-gray-50">
                     <td className="py-3 font-medium text-gray-800">{med.name}</td>
+                    <td className="py-3">
+                      <span className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded capitalize">
+                       {med.unit || 'tablet'}
+                      </span>
+                    </td>
                     <td className="py-3 text-gray-600">{formatCurrency(med.price)}</td>
                     <td className="py-3">
                       <span className={`px-2 py-1 rounded text-xs font-semibold ${totalStock < 20 ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'}`}>
@@ -230,7 +236,7 @@ function CounterDesk() {
               })}
               {medicines.length === 0 && (
                 <tr>
-                  <td colSpan="4" className="text-center py-4 text-gray-400">
+                  <td colSpan="5" className="text-center py-4 text-gray-400">
                     No medications found matching "{searchQuery}"
                   </td>
                 </tr>
@@ -273,7 +279,9 @@ function CounterDesk() {
                       >
                         -
                       </button>
-                      <span className="text-xs font-bold px-1 min-w-[16px] text-center">{item.quantity}</span>
+                      <span className="text-xs font-bold px-1 min-w-[16px] text-center">
+  {item.quantity} <span className="text-gray-400 capitalize">{item.unit || 'tablet'}</span>
+                      </span>
                       <button
                         onClick={() => updateQuantity(item.id, 1, item.availableStock)}
                         className="w-6 h-6 flex items-center justify-center bg-white border rounded text-xs font-bold text-gray-600 hover:bg-gray-50 cursor-pointer"
@@ -373,7 +381,7 @@ function CounterDesk() {
           <div className="mb-2 text-[11px] space-y-1">
             {lastCreatedOrder.items.map((item) => (
               <div key={item.id} className="flex justify-between items-center gap-2">
-                <span className="truncate">{item.name} (x{item.quantity})</span>
+                <span className="truncate">{item.name} (x{item.quantity} {item.unit || 'tablet'})</span>
                 <span className="font-semibold whitespace-nowrap">{formatCurrency(item.price * item.quantity)}</span>
               </div>
             ))}
