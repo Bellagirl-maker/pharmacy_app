@@ -10,8 +10,9 @@ class MedicinesController < ApplicationController
       @medicines = Medicine.includes(:batches).all
     end
     render json: @medicines.to_json(include: {
-      batches: { only: [:id, :batch_number, :quantity, :expiry_date] }
-    })
+  batches: { only: [:id, :batch_number, :quantity, :expiry_date] },
+  medicine_units: { only: [:id, :unit_name, :price, :quantity_in_base_units, :is_default] }
+})
   end
 
   # POST /medicines
@@ -24,8 +25,9 @@ class MedicinesController < ApplicationController
         trackable: @medicine
       )
       render json: @medicine.to_json(include: {
-        batches: { only: [:id, :batch_number, :quantity, :expiry_date] }
-      }), status: :created
+  batches: { only: [:id, :batch_number, :quantity, :expiry_date] },
+  medicine_units: { only: [:id, :unit_name, :price, :quantity_in_base_units, :is_default] }
+}), status: :created
     else
       render json: { error: @medicine.errors.full_messages.join(', ') }, status: :unprocessable_entity
     end
@@ -41,8 +43,9 @@ class MedicinesController < ApplicationController
         trackable: @medicine
       )
       render json: @medicine.to_json(include: {
-        batches: { only: [:id, :batch_number, :quantity, :expiry_date] }
-      })
+  batches: { only: [:id, :batch_number, :quantity, :expiry_date] },
+  medicine_units: { only: [:id, :unit_name, :price, :quantity_in_base_units, :is_default] }
+})
     else
       render json: { error: @medicine.errors.full_messages.join(', ') }, status: :unprocessable_entity
     end

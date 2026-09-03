@@ -1,6 +1,7 @@
 class Medicine < ApplicationRecord
   has_many :batches, dependent: :destroy
   has_many :order_items
+  has_many :medicine_units, dependent: :destroy
 
   # Scope to calculate total live stock across all batches dynamically
   def total_stock
