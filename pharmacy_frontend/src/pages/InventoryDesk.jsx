@@ -3,23 +3,30 @@ import api from '../api';
 import { db } from '../db/indexedDB';
 import InventoryBulkImport from '../components/InventoryBulkImport';
 
-const UNITS = ['tablet', 'strip', 'bottle', 'sachet', 'vial', 'box', 'tube', 'injection', 'cream', 'capsule'];
-
+const BASE_UNITS = ['tablet', 'strip', 'bottle', 'sachet', 'vial', 'box', 'tube', 'injection', 'cream', 'capsule'];
 const EMPTY_FORM = { name: '', price: '', unit: 'tablet', shelf_location: '' };
+const EMPTY_UNIT = { unit_name: '', price: '', quantity_in_base_units: 1, is_default: false };
 
 export default function InventoryDesk({ isNetworkOnline }) {
-  const [medicines, setMedicines]         = useState([]);
-  const [search, setSearch]               = useState('');
+  const [medicines, setMedicines]             = useState([]);
+  const [search, setSearch]                   = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
-  const [isLoading, setIsLoading]         = useState(true);
-  const [showImport, setShowImport]       = useState(false);
+  const [isLoading, setIsLoading]             = useState(true);
+  const [showImport, setShowImport]           = useState(false);
 
-  // Add / Edit form state
-  const [showForm, setShowForm]           = useState(false);
-  const [editingMedicine, setEditingMedicine] = useState(null); // null = adding new
-  const [form, setForm]                   = useState(EMPTY_FORM);
-  const [formError, setFormError]         = useState(null);
-  const [formLoading, setFormLoading]     = useState(false);
+  // Add / Edit medicine form
+  const [showForm, setShowForm]               = useState(false);
+  const [editingMedicine, setEditingMedicine] = useState(null);
+  const [form, setForm]                       = useState(EMPTY_FORM);
+  const [formError, setFormError]             = useState(null);
+  const [formLoading, setFormLoading]         = useState(false);
+  const [savedMedicineId, setSavedMedicineId] = useState(null);
+
+  // Selling units management
+  const [sellingUnits, setSellingUnits]       = useState([]);
+  const [newUnit, setNewUnit]                 = useState(EMPTY_UNIT);
+  const [unitError, setUnitError]             = useState(null);
+  const [unitLoading, setUnitLoading]         = useState(false);
 
   // Debounce search
   useEffect(() => {
@@ -53,6 +60,9 @@ export default function InventoryDesk({ isNetworkOnline }) {
     setEditingMedicine(null);
     setForm(EMPTY_FORM);
     setFormError(null);
+    setSavedMedicineId(null);
+    setSellingUnits([]);
+    setNewUnit(EMPTY_UNIT);
     setShowForm(true);
   };
 
@@ -65,6 +75,9 @@ export default function InventoryDesk({ isNetworkOnline }) {
       shelf_location: medicine.shelf_location || '',
     });
     setFormError(null);
+    setSavedMedicineId(medicine.id);
+    setSellingUnits(medicine.medicine_units || []);
+    setNewUnit(EMPTY_UNIT);
     setShowForm(true);
   };
 
@@ -73,25 +86,60 @@ export default function InventoryDesk({ isNetworkOnline }) {
     setEditingMedicine(null);
     setForm(EMPTY_FORM);
     setFormError(null);
+    setSavedMedicineId(null);
+    setSellingUnits([]);
+    setNewUnit(EMPTY_UNIT);
+    fetchMedicines();
   };
 
   const handleFormSubmit = async (e) => {
     e.preventDefault();
     setFormError(null);
     setFormLoading(true);
-
     try {
+      let res;
       if (editingMedicine) {
-        await api.patch(`/medicines/${editingMedicine.id}`, { medicine: form });
+        res = await api.patch(`/medicines/${editingMedicine.id}`, { medicine: form });
       } else {
-        await api.post('/medicines', { medicine: form });
+        res = await api.post('/medicines', { medicine: form });
       }
-      closeForm();
-      fetchMedicines();
+      setSavedMedicineId(res.data.id);
+      setSellingUnits(res.data.medicine_units || []);
     } catch (err) {
       setFormError(err.response?.data?.error || 'Failed to save medicine.');
     } finally {
       setFormLoading(false);
+    }
+  };
+
+  const handleAddUnit = async () => {
+    if (!savedMedicineId) return;
+    if (!newUnit.unit_name || !newUnit.price || !newUnit.quantity_in_base_units) {
+      setUnitError('Please fill in all unit fields.');
+      return;
+    }
+    setUnitError(null);
+    setUnitLoading(true);
+    try {
+      const res = await api.post(`/medicines/${savedMedicineId}/units`, {
+        medicine_unit: newUnit
+      });
+      setSellingUnits(prev => [...prev, res.data]);
+      setNewUnit(EMPTY_UNIT);
+    } catch (err) {
+      setUnitError(err.response?.data?.error || 'Failed to add unit.');
+    } finally {
+      setUnitLoading(false);
+    }
+  };
+
+  const handleDeleteUnit = async (unitId) => {
+    if (!savedMedicineId) return;
+    try {
+      await api.delete(`/medicines/${savedMedicineId}/units/${unitId}`);
+      setSellingUnits(prev => prev.filter(u => u.id !== unitId));
+    } catch (err) {
+      setUnitError(err.response?.data?.error || 'Failed to delete unit.');
     }
   };
 
@@ -135,22 +183,16 @@ export default function InventoryDesk({ isNetworkOnline }) {
           </span>
         </div>
         <div className="flex gap-2">
-          <button
-            onClick={openAddForm}
-            className="flex items-center gap-2 bg-teal-700 hover:bg-teal-800 text-white text-sm font-bold px-4 py-2 rounded-lg transition-all"
-          >
+          <button onClick={openAddForm}
+            className="flex items-center gap-2 bg-teal-700 hover:bg-teal-800 text-white text-sm font-bold px-4 py-2 rounded-lg transition-all">
             + Add Medicine
           </button>
-          <button
-            onClick={() => setShowImport(v => !v)}
-            className="flex items-center gap-2 bg-white hover:bg-gray-50 text-gray-700 text-sm font-bold px-4 py-2 rounded-lg border border-gray-200 transition-all"
-          >
+          <button onClick={() => setShowImport(v => !v)}
+            className="flex items-center gap-2 bg-white hover:bg-gray-50 text-gray-700 text-sm font-bold px-4 py-2 rounded-lg border border-gray-200 transition-all">
             📊 Mass CSV Import
           </button>
-          <button
-            onClick={fetchMedicines}
-            className="flex items-center gap-2 bg-white hover:bg-gray-50 text-blue-600 text-sm font-bold px-4 py-2 rounded-lg border border-blue-200 transition-all"
-          >
+          <button onClick={fetchMedicines}
+            className="flex items-center gap-2 bg-white hover:bg-gray-50 text-blue-600 text-sm font-bold px-4 py-2 rounded-lg border border-blue-200 transition-all">
             🔄 Refresh
           </button>
         </div>
@@ -168,7 +210,7 @@ export default function InventoryDesk({ isNetworkOnline }) {
       {/* Add / Edit Form Modal */}
       {showForm && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl shadow-xl border border-gray-100 w-full max-w-md p-6">
+          <div className="bg-white rounded-2xl shadow-xl border border-gray-100 w-full max-w-lg p-6 max-h-[90vh] overflow-y-auto">
             <div className="flex justify-between items-center mb-5">
               <h3 className="text-lg font-black text-gray-900">
                 {editingMedicine ? `Edit ${editingMedicine.name}` : 'Add New Medicine'}
@@ -176,90 +218,176 @@ export default function InventoryDesk({ isNetworkOnline }) {
               <button onClick={closeForm} className="text-gray-400 hover:text-gray-600 font-bold text-lg">✕</button>
             </div>
 
-            <form onSubmit={handleFormSubmit} className="space-y-4">
-              <div>
-                <label className="text-xs font-bold text-gray-500 uppercase tracking-wider block mb-1.5">
-                  Medicine Name *
-                </label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. Paracetamol 500mg"
-                  value={form.name}
-                  onChange={e => setForm({ ...form, name: e.target.value })}
-                  className="w-full p-3 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
+            {/* SECTION 1: Basic Info */}
+            <div className="mb-6">
+              <p className="text-xs font-black text-gray-400 uppercase tracking-wider mb-3">
+                1. Basic Information
+              </p>
+              <form onSubmit={handleFormSubmit} className="space-y-4">
                 <div>
                   <label className="text-xs font-bold text-gray-500 uppercase tracking-wider block mb-1.5">
-                    Price (GH₵) *
+                    Medicine Name *
                   </label>
                   <input
-                    type="number"
-                    required
-                    min="0"
-                    step="0.01"
-                    placeholder="0.00"
-                    value={form.price}
-                    onChange={e => setForm({ ...form, price: e.target.value })}
+                    type="text" required
+                    placeholder="e.g. Paracetamol 500mg"
+                    value={form.name}
+                    onChange={e => setForm({ ...form, name: e.target.value })}
                     className="w-full p-3 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
                   />
                 </div>
 
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-xs font-bold text-gray-500 uppercase tracking-wider block mb-1.5">
+                      Base Price (GH₵) *
+                    </label>
+                    <input
+                      type="number" required min="0" step="0.01"
+                      placeholder="0.00"
+                      value={form.price}
+                      onChange={e => setForm({ ...form, price: e.target.value })}
+                      className="w-full p-3 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-bold text-gray-500 uppercase tracking-wider block mb-1.5">
+                      Base Unit *
+                    </label>
+                    <select
+                      value={form.unit}
+                      onChange={e => setForm({ ...form, unit: e.target.value })}
+                      className="w-full p-3 border border-gray-300 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-teal-500"
+                    >
+                      {BASE_UNITS.map(u => (
+                        <option key={u} value={u}>{u.charAt(0).toUpperCase() + u.slice(1)}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
                 <div>
                   <label className="text-xs font-bold text-gray-500 uppercase tracking-wider block mb-1.5">
-                    Unit *
+                    Shelf Location
                   </label>
-                  <select
-                    value={form.unit}
-                    onChange={e => setForm({ ...form, unit: e.target.value })}
-                    className="w-full p-3 border border-gray-300 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-teal-500"
-                  >
-                    {UNITS.map(u => (
-                      <option key={u} value={u}>{u.charAt(0).toUpperCase() + u.slice(1)}</option>
+                  <input
+                    type="text"
+                    placeholder="e.g. Aisle 2, Shelf B"
+                    value={form.shelf_location}
+                    onChange={e => setForm({ ...form, shelf_location: e.target.value })}
+                    className="w-full p-3 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
+                  />
+                </div>
+
+                {formError && (
+                  <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-xs font-semibold text-red-600">
+                    {formError}
+                  </div>
+                )}
+
+                <button
+                  type="submit" disabled={formLoading}
+                  className="w-full bg-teal-700 hover:bg-teal-800 disabled:bg-gray-300 text-white font-bold py-3 rounded-xl text-sm transition-all"
+                >
+                  {formLoading ? 'Saving...' : savedMedicineId ? '✓ Saved — Update Info' : 'Save Medicine & Add Units Below'}
+                </button>
+              </form>
+            </div>
+
+            {/* SECTION 2: Selling Units — only shown after medicine is saved */}
+            {savedMedicineId && (
+              <div className="border-t border-gray-100 pt-5">
+                <p className="text-xs font-black text-gray-400 uppercase tracking-wider mb-3">
+                  2. Selling Units & Pricing
+                </p>
+                <p className="text-xs text-gray-500 mb-4">
+                  Define the different units this medicine can be sold in. The base unit is <strong className="text-gray-700 capitalize">{form.unit}</strong> at <strong className="text-gray-700">GH₵ {form.price}</strong>.
+                </p>
+
+                {/* Existing units */}
+                {sellingUnits.length > 0 && (
+                  <div className="mb-4 space-y-2">
+                    {sellingUnits.map(unit => (
+                      <div key={unit.id}
+                        className="flex items-center justify-between bg-teal-50 border border-teal-100 rounded-xl px-4 py-3">
+                        <div className="flex items-center gap-3">
+                          <span className="text-sm font-bold text-gray-800 capitalize">{unit.unit_name}</span>
+                          <span className="text-xs text-gray-500">= {unit.quantity_in_base_units} {form.unit}(s)</span>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <span className="text-sm font-black text-teal-700">GH₵ {Number(unit.price).toFixed(2)}</span>
+                          <button
+                            onClick={() => handleDeleteUnit(unit.id)}
+                            className="text-xs text-red-400 hover:text-red-600 font-bold"
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      </div>
                     ))}
-                  </select>
+                  </div>
+                )}
+
+                {/* Add new unit row */}
+                <div className="bg-gray-50 border border-gray-200 rounded-xl p-4">
+                  <p className="text-xs font-bold text-gray-500 mb-3">Add a selling unit:</p>
+                  <div className="grid grid-cols-3 gap-2 mb-2">
+                    <div>
+                      <label className="text-xs text-gray-400 block mb-1">Unit Name</label>
+                      <select
+                        value={newUnit.unit_name}
+                        onChange={e => setNewUnit({ ...newUnit, unit_name: e.target.value })}
+                        className="w-full p-2.5 border border-gray-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-teal-500"
+                      >
+                        <option value="">Select...</option>
+                        {BASE_UNITS.map(u => (
+                          <option key={u} value={u}>{u.charAt(0).toUpperCase() + u.slice(1)}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="text-xs text-gray-400 block mb-1">Price (GH₵)</label>
+                      <input
+                        type="number" min="0" step="0.01"
+                        placeholder="0.00"
+                        value={newUnit.price}
+                        onChange={e => setNewUnit({ ...newUnit, price: e.target.value })}
+                        className="w-full p-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs text-gray-400 block mb-1">Base units qty</label>
+                      <input
+                        type="number" min="1"
+                        placeholder="e.g. 10"
+                        value={newUnit.quantity_in_base_units}
+                        onChange={e => setNewUnit({ ...newUnit, quantity_in_base_units: e.target.value })}
+                        className="w-full p-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
+                      />
+                    </div>
+                  </div>
+                  <p className="text-xs text-gray-400 mb-3">
+                    e.g. 1 strip = 10 tablets → unit name: strip, base units qty: 10
+                  </p>
+                  {unitError && (
+                    <p className="text-xs text-red-600 font-semibold mb-2">{unitError}</p>
+                  )}
+                  <button
+                    onClick={handleAddUnit} disabled={unitLoading}
+                    className="w-full bg-gray-800 hover:bg-gray-900 disabled:bg-gray-300 text-white font-bold py-2.5 rounded-lg text-sm transition-all"
+                  >
+                    {unitLoading ? 'Adding...' : '+ Add Unit'}
+                  </button>
                 </div>
-              </div>
 
-              <div>
-                <label className="text-xs font-bold text-gray-500 uppercase tracking-wider block mb-1.5">
-                  Shelf Location
-                </label>
-                <input
-                  type="text"
-                  placeholder="e.g. Aisle 2, Shelf B"
-                  value={form.shelf_location}
-                  onChange={e => setForm({ ...form, shelf_location: e.target.value })}
-                  className="w-full p-3 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
-                />
-              </div>
-
-              {formError && (
-                <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-xs font-semibold text-red-600">
-                  {formError}
-                </div>
-              )}
-
-              <div className="flex gap-3 pt-2">
                 <button
-                  type="button"
                   onClick={closeForm}
-                  className="w-1/2 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold py-3 rounded-xl text-sm"
+                  className="w-full mt-4 bg-teal-700 hover:bg-teal-800 text-white font-bold py-3 rounded-xl text-sm transition-all"
                 >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={formLoading}
-                  className="w-1/2 bg-teal-700 hover:bg-teal-800 disabled:bg-gray-300 text-white font-bold py-3 rounded-xl text-sm transition-all"
-                >
-                  {formLoading ? 'Saving...' : editingMedicine ? 'Save Changes' : 'Add Medicine'}
+                  Done
                 </button>
               </div>
-            </form>
+            )}
           </div>
         </div>
       )}
@@ -286,8 +414,8 @@ export default function InventoryDesk({ isNetworkOnline }) {
             <thead className="bg-gray-50 text-xs font-bold text-gray-400 uppercase tracking-wider">
               <tr>
                 <th className="px-5 py-4 text-left">Item Description</th>
-                <th className="px-5 py-4 text-left">Unit</th>
-                <th className="px-5 py-4 text-left">Unit Selling Price</th>
+                <th className="px-5 py-4 text-left">Base Unit</th>
+                <th className="px-5 py-4 text-left">Selling Units</th>
                 <th className="px-5 py-4 text-left">Active Batches</th>
                 <th className="px-5 py-4 text-right">Total Stock</th>
                 <th className="px-5 py-4 text-center">Actions</th>
@@ -306,21 +434,33 @@ export default function InventoryDesk({ isNetworkOnline }) {
                       )}
                     </td>
                     <td className="px-5 py-4">
-                      <span className="text-xs font-bold bg-gray-100 text-gray-600 px-2 py-1 rounded-md capitalize">
-                        {medicine.unit || 'tablet'}
-                      </span>
+                      <div className="flex flex-col gap-0.5">
+                        <span className="text-xs font-bold bg-gray-100 text-gray-600 px-2 py-1 rounded-md capitalize w-fit">
+                          {medicine.unit || 'tablet'}
+                        </span>
+                        <span className="text-xs text-gray-400">GH₵ {Number(medicine.price || 0).toFixed(2)}</span>
+                      </div>
                     </td>
-                    <td className="px-5 py-4 font-bold text-gray-700">
-                      GH₵ {Number(medicine.price || 0).toFixed(2)}
+                    <td className="px-5 py-4">
+                      <div className="flex flex-wrap gap-1.5">
+                        {medicine.medicine_units && medicine.medicine_units.length > 0 ? (
+                          medicine.medicine_units.map(u => (
+                            <span key={u.id}
+                              className="text-xs bg-teal-50 text-teal-700 border border-teal-100 font-bold px-2 py-1 rounded-md capitalize">
+                              {u.unit_name} — GH₵ {Number(u.price).toFixed(2)}
+                            </span>
+                          ))
+                        ) : (
+                          <span className="text-xs text-gray-400 italic">No selling units defined</span>
+                        )}
+                      </div>
                     </td>
                     <td className="px-5 py-4">
                       <div className="flex flex-wrap gap-1.5">
                         {medicine.batches && medicine.batches.length > 0 ? (
                           medicine.batches.map(batch => (
-                            <span
-                              key={batch.id}
-                              className="text-xs bg-gray-100 text-gray-600 font-mono px-2 py-1 rounded-md border border-gray-200"
-                            >
+                            <span key={batch.id}
+                              className="text-xs bg-gray-100 text-gray-600 font-mono px-2 py-1 rounded-md border border-gray-200">
                               {batch.batch_number} ({batch.quantity}u)
                             </span>
                           ))
@@ -330,25 +470,18 @@ export default function InventoryDesk({ isNetworkOnline }) {
                       </div>
                     </td>
                     <td className="px-5 py-4 text-right">
-                      <span
-                        className="text-sm font-black"
-                        style={{ color: stockColor(stock) }}
-                      >
-                        {stock} units
+                      <span className="text-sm font-black" style={{ color: stockColor(stock) }}>
+                        {stock} {medicine.unit || 'units'}
                       </span>
                     </td>
                     <td className="px-5 py-4">
                       <div className="flex items-center justify-center gap-2">
-                        <button
-                          onClick={() => openEditForm(medicine)}
-                          className="text-xs font-bold text-blue-600 hover:text-blue-800 hover:bg-blue-50 px-3 py-1.5 rounded-lg border border-blue-200 transition-all"
-                        >
+                        <button onClick={() => openEditForm(medicine)}
+                          className="text-xs font-bold text-blue-600 hover:text-blue-800 hover:bg-blue-50 px-3 py-1.5 rounded-lg border border-blue-200 transition-all">
                           Edit
                         </button>
-                        <button
-                          onClick={() => handleDelete(medicine.id, medicine.name)}
-                          className="text-xs font-bold text-red-500 hover:text-red-700 hover:bg-red-50 px-3 py-1.5 rounded-lg border border-red-200 transition-all"
-                        >
+                        <button onClick={() => handleDelete(medicine.id, medicine.name)}
+                          className="text-xs font-bold text-red-500 hover:text-red-700 hover:bg-red-50 px-3 py-1.5 rounded-lg border border-red-200 transition-all">
                           Delete
                         </button>
                       </div>
