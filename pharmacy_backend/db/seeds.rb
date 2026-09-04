@@ -41,7 +41,7 @@ puts "Successfully seeded pharmacy inventory!"
 demo_manager = Manager.find_or_initialize_by(username: "costa_demo")
 demo_manager.password = "CostaDemo2026!"
 demo_manager.password_confirmation = "CostaDemo2026!"
-demo_manager.role = "admin"
+demo_manager.role = "owner"
 demo_manager.must_change_password = false
 demo_manager.save!
 
