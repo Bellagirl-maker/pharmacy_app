@@ -324,13 +324,13 @@ function CounterDesk() {
                         onClick={() => updateQuantity(item.id, item.selectedUnit?.unit_name, -1, item.availableStock, item.selectedUnit?.quantity_in_base_units || 1)}
                         className="w-6 h-6 flex items-center justify-center bg-white border rounded text-xs font-bold text-gray-600 hover:bg-gray-50 cursor-pointer"
                       >-</button>
-                      <span className="text-xs font-bold px-1 min-w-[16px] text-center">{item.quantity}</span>
+                      <span className="text-xs font-bold px-1 min-w-4 text-center">{item.quantity}</span>
                       <button
                         onClick={() => updateQuantity(item.id, item.selectedUnit?.unit_name, 1, item.availableStock, item.selectedUnit?.quantity_in_base_units || 1)}
                         className="w-6 h-6 flex items-center justify-center bg-white border rounded text-xs font-bold text-gray-600 hover:bg-gray-50 cursor-pointer"
                       >+</button>
                     </div>
-                    <div className="text-right min-w-[65px]">
+                    <div className="text-right min-w-16.25">
                       <span className="font-bold text-sm text-gray-700 block">
                         {formatCurrency(item.price * item.quantity)}
                       </span>
