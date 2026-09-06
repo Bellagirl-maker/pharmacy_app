@@ -10,14 +10,8 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.0].define(version: 2026_07_23_222107) do
-  create_schema "auth"
-  create_schema "extensions"
-  create_schema "graphql"
-  create_schema "graphql_public"
-  create_schema "pgbouncer"
-  create_schema "realtime"
-  create_schema "storage"
+ActiveRecord::Schema[8.0].define(version: 2026_09_02_232945) do
+  
   create_schema "vault"
 
   # These are extensions that must be enabled in order to support this database
@@ -58,6 +52,18 @@ ActiveRecord::Schema[8.0].define(version: 2026_07_23_222107) do
     t.boolean "must_change_password"
   end
 
+  create_table "medicine_units", force: :cascade do |t|
+    t.bigint "medicine_id", null: false
+    t.string "unit_name", null: false
+    t.decimal "price", precision: 10, scale: 2, null: false
+    t.integer "quantity_in_base_units", default: 1, null: false
+    t.boolean "is_default", default: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["medicine_id", "unit_name"], name: "index_medicine_units_on_medicine_id_and_unit_name", unique: true
+    t.index ["medicine_id"], name: "index_medicine_units_on_medicine_id"
+  end
+
   create_table "medicines", force: :cascade do |t|
     t.string "name"
     t.decimal "price", precision: 10, scale: 2
@@ -65,6 +71,7 @@ ActiveRecord::Schema[8.0].define(version: 2026_07_23_222107) do
     t.string "shelf_location"
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+    t.string "unit", default: "tablet"
   end
 
   create_table "order_items", force: :cascade do |t|
@@ -89,6 +96,7 @@ ActiveRecord::Schema[8.0].define(version: 2026_07_23_222107) do
 
   add_foreign_key "audit_logs", "managers"
   add_foreign_key "batches", "medicines"
+  add_foreign_key "medicine_units", "medicines"
   add_foreign_key "order_items", "medicines"
   add_foreign_key "order_items", "orders"
   add_foreign_key "orders", "managers"
