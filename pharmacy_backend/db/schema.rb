@@ -12,7 +12,6 @@
 
 ActiveRecord::Schema[8.0].define(version: 2026_09_02_232945) do
   
-  create_schema "vault"
 
   # These are extensions that must be enabled in order to support this database
   enable_extension "extensions.pg_stat_statements"
