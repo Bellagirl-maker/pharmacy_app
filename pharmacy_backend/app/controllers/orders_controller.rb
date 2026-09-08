@@ -1,14 +1,21 @@
 class OrdersController < ApplicationController
-  # 🎯 Force authentication across these mutation actions so current_manager is populated
   before_action :authorize_request, only: [:create, :update, :cancel]
+
+  def order_json(order)
+    order.as_json(include: {
+      order_items: {
+        include: { medicine: { only: [:id, :name, :unit] } },
+        only: [:id, :quantity, :price_at_sale, :unit_name]
+      }
+    })
+  end
 
   # GET /orders
   def index
-    # Eager loading order_items avoids the N+1 database querying issue seen in the logs!
-    @orders = Order.all.includes(:order_items).order(created_at: :desc)
-    render json: @orders.as_json(include: :order_items)
+    @orders = Order.all.includes(order_items: :medicine).order(created_at: :desc)
+    render json: @orders.map { |o| order_json(o) }
   end
-  
+
   # POST /orders
   def create
     items_param = params[:items] || []
@@ -20,7 +27,6 @@ class OrdersController < ApplicationController
     @order = nil
 
     ActiveRecord::Base.transaction do
-      # 🎯 Assign this new order ticket directly to the logged-in manager
       @order = Order.new(status: 'pending', manager: current_manager)
       total = 0.0
 
@@ -28,24 +34,28 @@ class OrdersController < ApplicationController
         medicine = Medicine.find(item_param[:medicine_id])
         quantity = item_param[:quantity].to_i
 
-        if medicine.total_stock < quantity
+        # Use base_quantity for stock check (accounts for unit conversion)
+        base_quantity = item_param[:base_quantity]&.to_i || quantity
+        if medicine.total_stock < base_quantity
           raise "Not enough stock for #{medicine.name}"
         end
 
-        price_at_sale = medicine.price
+        # Use price from frontend (reflects selected selling unit price)
+        price_at_sale = item_param[:price_at_sale]&.to_f || item_param[:price]&.to_f || medicine.price
+        unit_name = item_param[:unit_name] || medicine.unit || 'tablet'
         total += price_at_sale * quantity
 
         @order.order_items.build(
           medicine: medicine,
           quantity: quantity,
-          price_at_sale: price_at_sale
+          price_at_sale: price_at_sale,
+          unit_name: unit_name
         )
       end
 
       @order.total_amount = total
 
       if @order.save
-        # 🎯 Audit Footprint: Record order creation
         AuditLog.create!(
           manager_id: current_manager.id,
           action_type: "ORDER_CREATED",
@@ -53,8 +63,11 @@ class OrdersController < ApplicationController
           details: "Manager #{current_manager.username} created order ##{@order.id} with a total value of GHS #{@order.total_amount}."
         )
 
-        ActionCable.server.broadcast("orders_channel", { event: 'order_created', order: @order.as_json(include: :order_items) })
-        render json: @order.as_json(include: :order_items), status: :created
+        ActionCable.server.broadcast("orders_channel", {
+          event: 'order_created',
+          order: order_json(@order)
+        })
+        render json: order_json(@order), status: :created
       else
         render json: { errors: @order.errors.full_messages }, status: :unprocessable_entity
         raise ActiveRecord::Rollback
@@ -69,10 +82,8 @@ class OrdersController < ApplicationController
     @order = Order.find(params[:id])
 
     if @order.status == 'pending'
-      # 🔍 CHECK: Did the frontend explicitly ask to cancel/void this ticket?
       if params[:order] && (params[:order][:status] == 'cancelled' || params[:order][:status] == 'voided')
         if @order.update(status: 'cancelled')
-          # 🎯 Audit Footprint: Record inline order cancellation
           AuditLog.create!(
             manager_id: current_manager.id,
             action_type: "ORDER_CANCELLED",
@@ -80,32 +91,33 @@ class OrdersController < ApplicationController
             details: "Pending order ##{@order.id} was explicitly cancelled/voided by #{current_manager.username}."
           )
 
-          ActionCable.server.broadcast("orders_channel", { 
-            event: 'order_cancelled', 
-            order: @order.as_json(include: :order_items) 
+          ActionCable.server.broadcast("orders_channel", {
+            event: 'order_cancelled',
+            order: order_json(@order)
           })
-          render json: @order.as_json(include: :order_items), status: :ok
+          render json: order_json(@order), status: :ok
         else
           render json: { errors: @order.errors.full_messages }, status: :unprocessable_entity
         end
-        return 
+        return
       end
 
-      # --- STANDARD CHECKOUT/PAYMENT FLOW ---
+      # STANDARD CHECKOUT/PAYMENT FLOW
       ActiveRecord::Base.transaction do
         @order.order_items.each do |item|
           medicine = item.medicine
           requested_qty = item.quantity
 
-          available_batches = medicine.batches.where('expiry_date > ?', Date.today).order(expiry_date: :asc)
-          
+          available_batches = medicine.batches
+            .where('expiry_date > ?', Date.today)
+            .order(expiry_date: :asc)
+
           if medicine.total_stock < requested_qty
             raise "Insufficient stock for #{medicine.name}"
           end
 
           available_batches.each do |batch|
             next if requested_qty <= 0
-            
             if batch.quantity >= requested_qty
               batch.update!(quantity: batch.quantity - requested_qty)
               requested_qty = 0
@@ -117,7 +129,6 @@ class OrdersController < ApplicationController
         end
 
         if @order.update(status: 'paid')
-          # 🎯 Audit Footprint: Record order checkout completion
           AuditLog.create!(
             manager_id: current_manager.id,
             action_type: "ORDER_PAID",
@@ -125,8 +136,11 @@ class OrdersController < ApplicationController
             details: "Order ##{@order.id} updated to 'paid' following checkout processing by #{current_manager.username}."
           )
 
-          ActionCable.server.broadcast("orders_channel", { event: 'order_paid', order: @order.as_json(include: :order_items) })
-          render json: @order.as_json(include: :order_items), status: :ok
+          ActionCable.server.broadcast("orders_channel", {
+            event: 'order_paid',
+            order: order_json(@order)
+          })
+          render json: order_json(@order), status: :ok
         else
           render json: { errors: @order.errors.full_messages }, status: :unprocessable_entity
           raise ActiveRecord::Rollback
@@ -135,7 +149,6 @@ class OrdersController < ApplicationController
 
     elsif @order.status == 'paid'
       if @order.update(status: 'dispensed')
-        # 🎯 Audit Footprint: Record physical inventory dispensing
         AuditLog.create!(
           manager_id: current_manager.id,
           action_type: "ORDER_DISPENSED",
@@ -143,12 +156,14 @@ class OrdersController < ApplicationController
           details: "Order ##{@order.id} marked as 'dispensed' and handed off to customer by #{current_manager.username}."
         )
 
-        ActionCable.server.broadcast("orders_channel", { event: 'order_dispensed', order: @order.as_json(include: :order_items) })
-        render json: @order.as_json(include: :order_items), status: :ok
+        ActionCable.server.broadcast("orders_channel", {
+          event: 'order_dispensed',
+          order: order_json(@order)
+        })
+        render json: order_json(@order), status: :ok
       else
         render json: { errors: @order.errors.full_messages }, status: :unprocessable_entity
       end
-
     else
       render json: { error: "Order has already been fully dispensed and closed." }, status: :unprocessable_entity
     end
@@ -170,13 +185,14 @@ class OrdersController < ApplicationController
       @order.update!(status: 'cancelled')
 
       @order.order_items.each do |item|
-        target_batch = item.medicine.batches.where('expiry_date > ?', Date.current).first
+        target_batch = item.medicine.batches
+          .where('expiry_date > ?', Date.current)
+          .first
         if target_batch
           target_batch.increment!(:quantity, item.quantity)
         end
       end
 
-      # 🎯 Audit Footprint: Record standard route cancellation + stock return
       AuditLog.create!(
         manager_id: current_manager.id,
         action_type: "ORDER_CANCELLED",
@@ -185,8 +201,11 @@ class OrdersController < ApplicationController
       )
     end
 
-    ActionCable.server.broadcast("orders_channel", { event: 'order_cancelled', order: @order.as_json(include: :order_items) })
-    render json: @order.as_json(include: :order_items), status: :ok
+    ActionCable.server.broadcast("orders_channel", {
+      event: 'order_cancelled',
+      order: order_json(@order)
+    })
+    render json: order_json(@order), status: :ok
   rescue => e
     render json: { error: "Database/Server Error: #{e.message}" }, status: :internal_server_error
   end
