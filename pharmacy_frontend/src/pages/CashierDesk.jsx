@@ -174,7 +174,7 @@ function CashierDesk({ orders = [], fetchOrders, isNetworkOnline }) {
                   </div>
                 </div>
                 <div className="flex justify-between text-sm text-gray-500">
-                  <span>Items: {order.order_items?.length || 0} line(s)</span>
+                  <span>Items: {order.order_items?.length || 0}</span>
                   <span className="font-semibold text-gray-700">
                     {formatCurrency(order.total_amount)}
                   </span>
@@ -223,9 +223,7 @@ function CashierDesk({ orders = [], fetchOrders, isNetworkOnline }) {
                         <td className="py-3 font-medium text-gray-800">
                           {item.medicine?.name || `Medicine #${item.medicine_id}`}
                         </td>
-                        <td className="py-3 text-gray-600 capitalize">
-                        {item.quantity} {item.unit_name || item.medicine?.unit || 'unit'}
-                        </td>
+                        <td className="py-3 text-gray-600">{item.quantity} units</td>
                         <td className="py-3 text-right font-semibold text-gray-700">
                           {formatCurrency(item.price_at_sale || item.price || 0)}
                         </td>
