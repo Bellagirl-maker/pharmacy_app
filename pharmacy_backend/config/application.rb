@@ -26,6 +26,7 @@ module PharmacyBackend
     config.middleware.use ActionDispatch::Cookies
     config.middleware.use ActionDispatch::Session::CookieStore,
       key: '_pharmacy_session',
+      domain: '.onrender.com',
       same_site: :none,
       secure: true
   end
