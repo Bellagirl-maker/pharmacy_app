@@ -4,9 +4,12 @@ class ApplicationController < ActionController::API
   include ActionController::Cookies
 
   def current_manager
-  manager_id = request.headers['X-Manager-Id'] || session[:manager_id]
-  @current_manager ||= Manager.find_by(id: manager_id) if manager_id
-end
+    # SECURITY: identity/authentication must only ever come from the signed,
+    # server-controlled session cookie. Never trust a client-supplied header
+    # here - that would let anyone impersonate any manager (including an
+    # owner) just by setting a request header.
+    @current_manager ||= Manager.find_by(id: session[:manager_id]) if session[:manager_id]
+  end
 
   def logged_in?
     !!current_manager

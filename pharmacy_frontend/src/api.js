@@ -7,12 +7,4 @@ const api = axios.create({
   withCredentials: true,
 });
 
-api.interceptors.request.use((config) => {
-  const managerId = localStorage.getItem('manager_id');
-  if (managerId) {
-    config.headers['X-Manager-Id'] = managerId;
-  }
-  return config;
-});
-
 export default api;
