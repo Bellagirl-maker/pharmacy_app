@@ -66,6 +66,7 @@ end
   end
   temp_password = params[:temp_password] || "ChangeMe123!"
   if staff.update(password: temp_password, must_change_password: true)
+    staff.revoke_auth_token! # force immediate logout on their existing session
     render json: { success: true, message: "Password reset for #{staff.username}. Forced change flag active." }
   else
     render json: { error: staff.errors.full_messages.join(', ') }, status: :unprocessable_entity

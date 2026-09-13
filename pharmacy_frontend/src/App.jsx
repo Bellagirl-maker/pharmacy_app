@@ -173,9 +173,9 @@ export default function App() {
     const savedAuth = localStorage.getItem('pharmacy_auth');
     if (savedAuth) {
       try {
-        const { id, username: savedUsername, role } = JSON.parse(savedAuth);
+        const { id, username: savedUsername, role, token } = JSON.parse(savedAuth);
         if (id && savedUsername && role) {
-          localStorage.setItem('manager_id', id);
+          if (token) localStorage.setItem('auth_token', token);
           setIsAuthenticated(true);
           setUserRole(role);
           setActiveUsername(savedUsername);
@@ -274,7 +274,7 @@ export default function App() {
               return;
             }
 
-            localStorage.setItem('manager_id', cached.id);
+            if (cached.token) localStorage.setItem('auth_token', cached.token);
             setIsAuthenticated(true);
             setUserRole(cached.role);
             setActiveUsername(cached.username);
@@ -307,12 +307,13 @@ export default function App() {
       if (response.data.success) {
         const assignedRole = response.data.role || 'counter';
 
-        localStorage.setItem('manager_id', response.data.id);
+        localStorage.setItem('auth_token', response.data.token);
         localStorage.setItem('pharmacy_auth', JSON.stringify({
           id: response.data.id,
           username: usernameInput,
           role: assignedRole,
-          passwordHash: passwordHash
+          passwordHash: passwordHash,
+          token: response.data.token
         }));
 
         setIsAuthenticated(true);
@@ -333,7 +334,11 @@ export default function App() {
   };
 
   const handleLogout = () => {
-    localStorage.removeItem('manager_id');
+    // Best-effort: revoke the token server-side too, so it can't be reused.
+    // Don't block logging the UI out if this fails (e.g. offline).
+    api.delete('/logout').catch(() => {});
+
+    localStorage.removeItem('auth_token');
     setIsAuthenticated(false);
     setUserRole(null);
     setActiveUsername('');

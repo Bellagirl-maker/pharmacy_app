@@ -26,8 +26,19 @@ class OrdersController < ApplicationController
 
     @order = nil
 
+    # Attribution only, NOT authentication: lets an order created offline
+    # (see src/services/syncEngine.js) stay credited to whoever actually
+    # rang it up, even if a different manager is logged in by the time it
+    # syncs. This never changes who is authorized to perform the request -
+    # that is always current_manager, resolved solely from the session.
+    credited_manager = current_manager
+    if params[:creator_manager_id].present?
+      requested = Manager.find_by(id: params[:creator_manager_id])
+      credited_manager = requested if requested
+    end
+
     ActiveRecord::Base.transaction do
-      @order = Order.new(status: 'pending', manager: current_manager)
+      @order = Order.new(status: 'pending', manager: credited_manager)
       total = 0.0
 
       items_param.each do |item_param|
@@ -56,11 +67,14 @@ class OrdersController < ApplicationController
       @order.total_amount = total
 
       if @order.save
+        attribution_note = credited_manager == current_manager ? "" :
+          " (synced by #{current_manager.username} on behalf of #{credited_manager.username}, originally rung up offline)"
+
         AuditLog.create!(
           manager_id: current_manager.id,
           action_type: "ORDER_CREATED",
           trackable: @order,
-          details: "Manager #{current_manager.username} created order ##{@order.id} with a total value of GHS #{@order.total_amount}."
+          details: "Manager #{credited_manager.username} created order ##{@order.id} with a total value of GHS #{@order.total_amount}.#{attribution_note}"
         )
 
         ActionCable.server.broadcast("orders_channel", {

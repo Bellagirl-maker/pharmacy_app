@@ -7,10 +7,15 @@ const api = axios.create({
   withCredentials: true,
 });
 
+// Attach the bearer token issued at login (see sessions#create). This token
+// is an opaque, server-generated secret - unlike the old X-Manager-Id
+// header, it can't be guessed or set to someone else's value to impersonate
+// them, because the backend only trusts it after matching it against a
+// stored digest.
 api.interceptors.request.use((config) => {
-  const managerId = localStorage.getItem('manager_id');
-  if (managerId) {
-    config.headers['X-Manager-Id'] = managerId;
+  const token = localStorage.getItem('auth_token');
+  if (token) {
+    config.headers['Authorization'] = `Bearer ${token}`;
   }
   return config;
 });

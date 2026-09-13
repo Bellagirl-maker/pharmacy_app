@@ -22,6 +22,7 @@ end
   get 'owner/dashboard', to: 'owner#dashboard'
 
   post 'login', to: 'sessions#create'
+  delete 'logout', to: 'sessions#destroy'
   post "/inventory/import", to: "inventory_imports#create"
 
   # Manager management routing matrix

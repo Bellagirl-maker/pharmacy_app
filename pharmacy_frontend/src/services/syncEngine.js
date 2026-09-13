@@ -25,7 +25,13 @@ export const syncEngine = {
     // Capture who is creating this order RIGHT NOW so attribution
     // is correct when the order syncs later (even if a different
     // user is logged in at sync time).
-    const creatorManagerId = localStorage.getItem('manager_id');
+    let creatorManagerId = null;
+    try {
+      const cachedAuth = JSON.parse(localStorage.getItem('pharmacy_auth') || 'null');
+      creatorManagerId = cachedAuth?.id || null;
+    } catch {
+      creatorManagerId = null;
+    }
 
     const orderItems = items.map((item) => ({
       medicine_id: item.medicine_id,
@@ -67,15 +73,16 @@ export const syncEngine = {
 
     for (const order of pendingOrders) {
       try {
-        // Use the original creator's manager ID for correct attribution,
-        // not whoever happens to be logged in at sync time.
-        const syncHeaders = order.creator_manager_id
-          ? { 'X-Manager-Id': order.creator_manager_id }
-          : {};
+        // Credit the original creator's manager ID for correct attribution,
+        // not whoever happens to be logged in at sync time. This is sent as
+        // a normal body field - it only labels who rang up the sale, it
+        // does not authenticate the request (the current session does).
+        const payload = {
+          ...(order.raw_payload || order),
+          ...(order.creator_manager_id ? { creator_manager_id: order.creator_manager_id } : {})
+        };
 
-        await api.post('/orders', order.raw_payload || order, {
-          headers: syncHeaders
-        });
+        await api.post('/orders', payload);
 
         await db.offlineOrders.delete(order.tempId);
         console.log(`✅ Synced offline order #${order.tempId}`);
