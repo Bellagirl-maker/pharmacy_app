@@ -3,7 +3,8 @@ Rails.application.config.middleware.insert_before 0, Rack::Cors do
     origins 'http://localhost:5173', 
             'https://pharmacy-app-6edc.vercel.app',
             'https://pharmacy-frontend-krpu.onrender.com',
-            'https://pharmacy-demo-frontend.onrender.com'
+            'https://pharmacy-demo-frontend.onrender.com',
+            'https://pharmademo-frontend.onrender.com'
 
     resource '*',
       headers: :any,
